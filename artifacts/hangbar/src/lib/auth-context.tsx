@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 interface AuthContextType {
   user: User | null;
-  userData: any | null;
+  userData: Record<string, unknown> | null;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -19,33 +19,34 @@ const AuthContext = createContext<AuthContextType>({
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [userData, setUserData] = useState<any | null>(null);
+  const [userData, setUserData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
+
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          setUserData(userDoc.data());
-        } else {
-          // Initialize user
-          const newUser = {
-            displayName: firebaseUser.displayName || 'Guest',
-            email: firebaseUser.email,
-            photoURL: firebaseUser.photoURL || '',
-            role: 'member',
-            joinedAt: serverTimestamp(),
-            bio: '',
-          };
-          await setDoc(userDocRef, newUser);
-          setUserData(newUser);
-        }
+
+        const payload: Record<string, unknown> = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || 'Guest',
+          photoURL: firebaseUser.photoURL || '',
+          role: 'staff',
+          createdAt: serverTimestamp(),
+        };
+
+        // setDoc with merge: true creates the document if it does not exist,
+        // or merges into it if it does — never throws "client is offline".
+        await setDoc(userDocRef, payload, { merge: true });
+
+        setUserData(payload);
       } else {
         setUserData(null);
       }
+
       setLoading(false);
     });
 
@@ -54,6 +55,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     await firebaseSignOut(auth);
+    setUser(null);
+    setUserData(null);
   };
 
   return (
