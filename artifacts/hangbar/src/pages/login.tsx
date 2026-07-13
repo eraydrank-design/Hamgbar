@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 
 export default function Login() {
   const [, setLocation] = useLocation();
-  const { user, loading } = useAuth();
+  const { user, userData, loading } = useAuth();
   
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
