@@ -22,6 +22,20 @@ export default function Login() {
     return null;
   }
 
+  const translateFirebaseError = (code: string) => {
+    const map: Record<string, string> = {
+      'auth/invalid-email': 'Geçersiz e-posta adresi.',
+      'auth/user-not-found': 'Bu e-posta adresiyle kayıtlı kullanıcı bulunamadı.',
+      'auth/wrong-password': 'Şifre hatalı.',
+      'auth/email-already-in-use': 'Bu e-posta adresi zaten kullanımda.',
+      'auth/weak-password': 'Şifre en az 6 karakter olmalıdır.',
+      'auth/popup-closed-by-user': 'Google girişi iptal edildi.',
+      'auth/network-request-failed': 'Ağ bağlantısı hatası. Lütfen tekrar deneyin.',
+      'auth/too-many-requests': 'Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.',
+    };
+    return map[code] || 'Bir hata oluştu. Lütfen tekrar deneyin.';
+  };
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -35,7 +49,7 @@ export default function Login() {
       }
       setLocation('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      setError(translateFirebaseError(err.code) || err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -49,7 +63,7 @@ export default function Login() {
       await signInWithPopup(auth, provider);
       setLocation('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Google sign-in failed');
+      setError(translateFirebaseError(err.code) || err.message);
       setIsSubmitting(false);
     }
   };
@@ -69,7 +83,7 @@ export default function Login() {
         <div className="text-center mb-8">
           <GlassWater className="w-12 h-12 text-primary mx-auto mb-4" />
           <h1 className="font-serif text-4xl font-bold text-gradient-gold tracking-widest uppercase mb-2">HangBar</h1>
-          <p className="text-muted-foreground text-sm tracking-widest uppercase">Members Only</p>
+          <p className="text-muted-foreground text-sm tracking-widest uppercase">Yalnızca Üyeler</p>
         </div>
 
         <div className="glass rounded-2xl p-8 shadow-2xl">
@@ -85,12 +99,12 @@ export default function Login() {
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
             </svg>
-            Continue with Google
+            Google ile Devam Et
           </button>
 
           <div className="flex items-center gap-4 mb-6">
             <div className="flex-1 h-px bg-white/10"></div>
-            <span className="text-xs text-muted-foreground uppercase tracking-wider">or</span>
+            <span className="text-xs text-muted-foreground uppercase tracking-wider">veya</span>
             <div className="flex-1 h-px bg-white/10"></div>
           </div>
 
@@ -100,7 +114,7 @@ export default function Login() {
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
                   type="email"
-                  placeholder="Email"
+                  placeholder="E-posta"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-black/50 border border-white/10 rounded-xl py-3 pl-11 pr-4 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
@@ -115,7 +129,7 @@ export default function Login() {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
                   type="password"
-                  placeholder="Password"
+                  placeholder="Şifre"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-black/50 border border-white/10 rounded-xl py-3 pl-11 pr-4 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
@@ -136,19 +150,19 @@ export default function Login() {
               data-testid="button-submit"
             >
               {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isRegister ? 'Join the Club' : 'Enter'}
+              {isRegister ? 'Kulübe Katıl' : 'Giriş Yap'}
             </button>
           </form>
 
           <p className="text-center mt-6 text-sm text-muted-foreground">
-            {isRegister ? 'Already a member? ' : 'New here? '}
+            {isRegister ? 'Zaten üye misiniz? ' : 'Yeni misiniz? '}
             <button
               type="button"
               onClick={() => setIsRegister(!isRegister)}
               className="text-primary hover:text-primary/80 transition-colors focus:outline-none"
               data-testid="button-toggle-register"
             >
-              {isRegister ? 'Sign In' : 'Apply for Access'}
+              {isRegister ? 'Giriş Yap' : 'Kayıt Ol'}
             </button>
           </p>
         </div>

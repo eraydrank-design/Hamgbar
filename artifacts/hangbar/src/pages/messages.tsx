@@ -1,10 +1,11 @@
 import { useAuth } from '@/lib/auth-context';
 import { useCollection } from '@/hooks/use-firestore';
 import { useState, useRef, useEffect } from 'react';
-import { orderBy, addDoc, collection, serverTimestamp, query, where, or } from 'firebase/firestore';
+import { orderBy, addDoc, collection, serverTimestamp, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Send, User, Search } from 'lucide-react';
+import { Send, User, Search, MessageSquare } from 'lucide-react';
 import { format } from 'date-fns';
+import { tr } from 'date-fns/locale';
 
 export default function Messages() {
   const { userData, user } = useAuth();
@@ -20,25 +21,19 @@ export default function Messages() {
   useEffect(() => {
     if (!user || !selectedUser) return;
 
-    // Use a custom query for the conversation between current user and selected user
     const q = query(
       collection(db, 'messages'),
       orderBy('createdAt', 'asc')
     );
     
-    // In a real app we'd use composite index, but for simplicity we filter client-side 
-    // or use a chat room model. Here we just fetch and filter for the demo.
     import('firebase/firestore').then(({ onSnapshot }) => {
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const result = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        // Filter for this conversation
-        const conversationMessages = result.filter((m: any) => 
+        const conversationMessages = result.filter((m: any) =>
           (m.senderId === user.uid && m.receiverId === selectedUser.id) ||
           (m.senderId === selectedUser.id && m.receiverId === user.uid)
         );
         setMessages(conversationMessages);
-        
-        // Scroll to bottom
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 100);
@@ -60,30 +55,30 @@ export default function Messages() {
         senderId: user.uid,
         receiverId: selectedUser.id,
         createdAt: serverTimestamp(),
-        read: false
+        read: false,
       });
     } catch (error) {
-      console.error("Failed to send message:", error);
+      console.error('Mesaj gönderilemedi:', error);
     }
   };
 
-  const filteredUsers = users.filter((u: any) => 
-    u.id !== user?.uid && 
-    (u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredUsers = users.filter((u: any) =>
+    u.id !== user?.uid &&
+    (u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
      u.role?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
     <div className="h-[calc(100dvh-2rem)] md:h-[calc(100dvh-6rem)] animate-in fade-in duration-500 flex flex-col md:flex-row gap-6">
-      {/* Users List Panel */}
+      {/* Üye Listesi Paneli */}
       <div className={`w-full md:w-80 flex flex-col glass rounded-2xl overflow-hidden ${selectedUser ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-white/10 bg-black/20">
-          <h2 className="font-serif text-xl font-bold text-foreground mb-4">Members</h2>
+          <h2 className="font-serif text-xl font-bold text-foreground mb-4">Üyeler</h2>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search members..."
+              placeholder="Üye ara..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-black/50 border border-white/10 rounded-xl py-2 pl-9 pr-4 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50"
@@ -93,13 +88,15 @@ export default function Messages() {
         
         <div className="flex-1 overflow-y-auto p-2">
           {usersLoading ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">Loading members...</div>
+            <div className="p-4 text-center text-sm text-muted-foreground">Üyeler yükleniyor...</div>
           ) : filteredUsers.map((u: any) => (
-            <div 
+            <div
               key={u.id}
               onClick={() => setSelectedUser(u)}
               className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
-                selectedUser?.id === u.id ? 'bg-primary/20 border border-primary/30' : 'hover:bg-white/5 border border-transparent'
+                selectedUser?.id === u.id
+                  ? 'bg-primary/20 border border-primary/30'
+                  : 'hover:bg-white/5 border border-transparent'
               }`}
             >
               <div className="w-10 h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -111,7 +108,7 @@ export default function Messages() {
               </div>
               <div className="flex-1 overflow-hidden">
                 <div className="flex justify-between items-center">
-                  <h4 className="font-medium text-sm text-foreground truncate">{u.displayName || 'Anonymous'}</h4>
+                  <h4 className="font-medium text-sm text-foreground truncate">{u.displayName || 'Anonim'}</h4>
                   <span className="text-[10px] text-primary uppercase tracking-wider">{u.role}</span>
                 </div>
               </div>
@@ -120,12 +117,12 @@ export default function Messages() {
         </div>
       </div>
 
-      {/* Chat Panel */}
+      {/* Sohbet Paneli */}
       <div className={`flex-1 flex flex-col glass rounded-2xl overflow-hidden ${!selectedUser ? 'hidden md:flex' : 'flex'}`}>
         {selectedUser ? (
           <>
             <div className="p-4 border-b border-white/10 bg-black/20 flex items-center gap-3">
-              <button 
+              <button
                 onClick={() => setSelectedUser(null)}
                 className="md:hidden p-2 text-muted-foreground hover:text-foreground"
               >
@@ -150,7 +147,7 @@ export default function Messages() {
                   <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
                     <MessageSquare className="w-8 h-8 opacity-50" />
                   </div>
-                  <p>Start a conversation with {selectedUser.displayName}</p>
+                  <p>{selectedUser.displayName} ile konuşmayı başlatın</p>
                 </div>
               ) : (
                 messages.map((msg: any) => {
@@ -158,13 +155,15 @@ export default function Messages() {
                   return (
                     <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[75%] rounded-2xl px-4 py-2 ${
-                        isMine 
-                          ? 'bg-primary text-primary-foreground rounded-br-sm shadow-[0_0_15px_rgba(201,168,76,0.15)]' 
+                        isMine
+                          ? 'bg-primary text-primary-foreground rounded-br-sm shadow-[0_0_15px_rgba(201,168,76,0.15)]'
                           : 'bg-white/10 text-foreground rounded-bl-sm border border-white/5'
                       }`}>
                         <p className="text-sm">{msg.text}</p>
                         <span className={`text-[10px] mt-1 block ${isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                          {msg.createdAt?.toDate ? format(msg.createdAt.toDate(), 'h:mm a') : 'Now'}
+                          {msg.createdAt?.toDate
+                            ? format(msg.createdAt.toDate(), 'HH:mm', { locale: tr })
+                            : 'Şimdi'}
                         </span>
                       </div>
                     </div>
@@ -180,7 +179,7 @@ export default function Messages() {
                   type="text"
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
-                  placeholder="Type a message..."
+                  placeholder="Bir mesaj yazın..."
                   className="flex-1 bg-black/50 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50"
                 />
                 <button
@@ -198,13 +197,11 @@ export default function Messages() {
             <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6">
               <MessageSquare className="w-10 h-10 opacity-50" />
             </div>
-            <h3 className="text-xl font-serif text-foreground mb-2">Member Messages</h3>
-            <p className="max-w-xs text-sm">Select a member from the list to start a private conversation.</p>
+            <h3 className="text-xl font-serif text-foreground mb-2">Üye Mesajları</h3>
+            <p className="max-w-xs text-sm">Özel konuşma başlatmak için listeden bir üye seçin.</p>
           </div>
         )}
       </div>
     </div>
   );
 }
-// Adding missing import
-import { MessageSquare } from 'lucide-react';

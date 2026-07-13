@@ -27,19 +27,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isStaffOrAdmin = isAdmin || userData?.role === 'staff';
 
   const mainLinks = [
-    { href: '/dashboard', label: 'Dashboard', icon: Home },
-    { href: '/explore', label: 'Explore', icon: Compass },
-    { href: '/messages', label: 'Messages', icon: MessageSquare },
-    { href: '/cocktails', label: 'Cocktails', icon: Martini },
-    { href: '/profile', label: 'Profile', icon: User },
+    { href: '/dashboard', label: 'Ana Sayfa', icon: Home },
+    { href: '/explore', label: 'Keşfet', icon: Compass },
+    { href: '/messages', label: 'Mesajlar', icon: MessageSquare },
+    { href: '/cocktails', label: 'Kokteyller', icon: Martini },
+    { href: '/profile', label: 'Profil', icon: User },
   ];
 
   const secondaryLinks = [
-    { href: '/announcements', label: 'Announcements', icon: Bell },
-    { href: '/requests', label: 'Requests', icon: ClipboardList },
-    { href: '/rules', label: 'Rules', icon: BookOpen },
-    ...(isStaffOrAdmin ? [{ href: '/tasks', label: 'Tasks', icon: CheckSquare }] : []),
-    ...(isAdmin ? [{ href: '/admin', label: 'Admin', icon: ShieldAlert }] : []),
+    { href: '/announcements', label: 'Duyurular', icon: Bell },
+    { href: '/requests', label: 'Talepler', icon: ClipboardList },
+    { href: '/rules', label: 'Kurallar', icon: BookOpen },
+    ...(isStaffOrAdmin ? [{ href: '/tasks', label: 'Görevler', icon: CheckSquare }] : []),
+    ...(isAdmin ? [{ href: '/admin', label: 'Yönetim', icon: ShieldAlert }] : []),
   ];
 
   const NavItem = ({ href, label, icon: Icon, onClick }: any) => {
@@ -53,7 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               ? 'bg-primary/10 text-primary font-medium border border-primary/20' 
               : 'text-muted-foreground hover:bg-white/5 hover:text-foreground'
           }`}
-          data-testid={`nav-${label.toLowerCase()}`}
+          data-testid={`nav-${label.toLowerCase().replace(/\s/g, '-')}`}
         >
           <Icon className={`w-5 h-5 ${isActive ? 'text-primary' : ''}`} />
           <span>{label}</span>
@@ -78,7 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div>
-            <h3 className="px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">More</h3>
+            <h3 className="px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Daha Fazla</h3>
             <div className="space-y-1">
               {secondaryLinks.map((link) => (
                 <NavItem key={link.href} {...link} />
@@ -91,14 +91,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3 px-4 py-3 mb-2">
             <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 overflow-hidden">
               {userData?.photoURL ? (
-                <img src={userData.photoURL} alt={userData.displayName} className="w-full h-full object-cover" />
+                <img src={userData.photoURL as string} alt={userData.displayName as string} className="w-full h-full object-cover" />
               ) : (
                 <User className="w-5 h-5 text-primary" />
               )}
             </div>
             <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-medium truncate">{userData?.displayName}</p>
-              <p className="text-xs text-muted-foreground capitalize">{userData?.role}</p>
+              <p className="text-sm font-medium truncate">{userData?.displayName as string}</p>
+              <p className="text-xs text-muted-foreground capitalize">{userData?.role as string}</p>
             </div>
           </div>
           <button
@@ -107,7 +107,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             data-testid="button-signout"
           >
             <LogOut className="w-4 h-4" />
-            Sign Out
+            Çıkış Yap
           </button>
         </div>
       </aside>
@@ -167,7 +167,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
               <div className="flex-1 overflow-y-auto px-4 space-y-6">
                 <div>
-                  <h3 className="px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">More</h3>
+                  <h3 className="px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Daha Fazla</h3>
                   <div className="space-y-1">
                     {secondaryLinks.map((link) => (
                       <NavItem key={link.href} {...link} onClick={() => setMobileMenuOpen(false)} />
@@ -181,7 +181,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm text-destructive bg-destructive/10 rounded-lg"
                 >
                   <LogOut className="w-4 h-4" />
-                  Sign Out
+                  Çıkış Yap
                 </button>
               </div>
             </motion.div>

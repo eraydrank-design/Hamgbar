@@ -1,21 +1,22 @@
 import { useCollection } from '@/hooks/use-firestore';
 import { useState } from 'react';
-import { Martini, Search, Filter, Loader2, X } from 'lucide-react';
+import { Martini, Search, Loader2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Cocktails() {
   const { data: cocktails, loading } = useCollection('cocktails');
   const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState('All');
+  const [activeCategory, setActiveCategory] = useState('Tümü');
   const [selectedCocktail, setSelectedCocktail] = useState<any>(null);
 
-  const categories = ['All', ...Array.from(new Set(cocktails.map((c: any) => c.category).filter(Boolean)))];
+  const rawCategories: string[] = Array.from(new Set(cocktails.map((c: any) => c.category).filter(Boolean)));
+  const categories = ['Tümü', ...rawCategories];
 
   const filteredCocktails = cocktails.filter((c: any) => {
     const matchesSearch = c.name?.toLowerCase().includes(search.toLowerCase()) || 
                           c.description?.toLowerCase().includes(search.toLowerCase()) ||
                           c.ingredients?.some((i: string) => i.toLowerCase().includes(search.toLowerCase()));
-    const matchesCategory = activeCategory === 'All' || c.category === activeCategory;
+    const matchesCategory = activeCategory === 'Tümü' || c.category === activeCategory;
     return matchesSearch && matchesCategory;
   });
 
@@ -23,14 +24,14 @@ export default function Cocktails() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-gradient-gold mb-2">The Menu</h1>
-          <p className="text-muted-foreground">Curated libations for members.</p>
+          <h1 className="font-serif text-3xl font-bold text-gradient-gold mb-2">Menü</h1>
+          <p className="text-muted-foreground">Üyeler için özenle seçilmiş içkiler.</p>
         </div>
         <div className="relative w-full md:w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search cocktails..."
+            placeholder="Kokteyl ara..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-black/50 border border-white/10 rounded-xl py-2 pl-9 pr-4 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50"
@@ -38,9 +39,9 @@ export default function Cocktails() {
         </div>
       </header>
 
-      {/* Categories */}
+      {/* Kategoriler */}
       <div className="flex flex-wrap gap-2">
-        {categories.map((cat: any) => (
+        {categories.map((cat) => (
           <button
             key={cat}
             onClick={() => setActiveCategory(cat)}
@@ -55,7 +56,7 @@ export default function Cocktails() {
         ))}
       </div>
 
-      {/* Grid */}
+      {/* Izgara */}
       {loading ? (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[1, 2, 3, 4, 5, 6].map(i => (
@@ -65,8 +66,8 @@ export default function Cocktails() {
       ) : filteredCocktails.length === 0 ? (
         <div className="text-center py-20 glass rounded-2xl border-dashed">
           <Martini className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-          <h3 className="text-lg font-medium text-foreground mb-1">No cocktails found</h3>
-          <p className="text-muted-foreground text-sm">Try adjusting your search or filters.</p>
+          <h3 className="text-lg font-medium text-foreground mb-1">Kokteyl bulunamadı</h3>
+          <p className="text-muted-foreground text-sm">Arama veya filtrelerinizi değiştirmeyi deneyin.</p>
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -78,13 +79,13 @@ export default function Cocktails() {
             >
               {!cocktail.available && (
                 <div className="absolute top-4 right-4 bg-destructive/20 text-destructive text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded">
-                  86'd
+                  Mevcut Değil
                 </div>
               )}
               
               <div className="flex justify-between items-start mb-4">
                 <h3 className="font-serif text-xl font-bold text-foreground group-hover:text-primary transition-colors">{cocktail.name}</h3>
-                <span className="text-primary font-medium">${cocktail.price}</span>
+                <span className="text-primary font-medium">{cocktail.price} ₺</span>
               </div>
               
               <p className="text-sm text-muted-foreground line-clamp-3 mb-4 flex-1">
@@ -101,7 +102,7 @@ export default function Cocktails() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Detay Modalı */}
       <AnimatePresence>
         {selectedCocktail && (
           <>
@@ -140,7 +141,7 @@ export default function Cocktails() {
                 <div className="p-8">
                   <div className="flex justify-between items-start mb-2">
                     <h2 className="font-serif text-3xl font-bold text-gradient-gold">{selectedCocktail.name}</h2>
-                    <span className="text-xl font-serif text-primary">${selectedCocktail.price}</span>
+                    <span className="text-xl font-serif text-primary">{selectedCocktail.price} ₺</span>
                   </div>
                   
                   <div className="flex gap-2 mb-6">
@@ -149,7 +150,7 @@ export default function Cocktails() {
                     </span>
                     {!selectedCocktail.available && (
                       <span className="text-xs bg-destructive/10 px-2 py-1 rounded text-destructive uppercase tracking-wider border border-destructive/20 font-bold">
-                        Unavailable
+                        Mevcut Değil
                       </span>
                     )}
                   </div>
@@ -159,7 +160,7 @@ export default function Cocktails() {
                   </p>
 
                   <div className="space-y-3">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest border-b border-white/10 pb-2">Ingredients</h4>
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest border-b border-white/10 pb-2">İçindekiler</h4>
                     <ul className="grid grid-cols-2 gap-2">
                       {selectedCocktail.ingredients?.map((ing: string, i: number) => (
                         <li key={i} className="text-sm flex items-center gap-2 text-foreground/80">

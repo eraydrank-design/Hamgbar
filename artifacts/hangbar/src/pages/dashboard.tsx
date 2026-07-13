@@ -4,7 +4,6 @@ import { limit, orderBy } from 'firebase/firestore';
 import { motion } from 'framer-motion';
 import { Bell, MessageSquare, ClipboardList, CheckSquare, Martini, ArrowRight } from 'lucide-react';
 import { Link } from 'wouter';
-import { format } from 'date-fns';
 
 export default function Dashboard() {
   const { userData } = useAuth();
@@ -34,51 +33,55 @@ export default function Dashboard() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex items-end justify-between border-b border-white/10 pb-6">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-gradient-gold mb-2">Welcome back, {userData?.displayName}</h1>
-          <p className="text-muted-foreground">The bar is open. What would you like to do tonight?</p>
+          <h1 className="font-serif text-3xl font-bold text-gradient-gold mb-2">
+            Hoş geldin, {userData?.displayName as string}
+          </h1>
+          <p className="text-muted-foreground">Bar açık. Bu gece ne yapmak istersiniz?</p>
         </div>
       </header>
 
-      {/* Stats Row */}
+      {/* İstatistikler */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="glass rounded-xl p-4 flex flex-col items-center justify-center text-center">
           <Bell className="w-6 h-6 text-primary mb-2" />
           <span className="text-2xl font-serif font-bold">{announcements.length}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Announcements</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Duyurular</span>
         </div>
         <div className="glass rounded-xl p-4 flex flex-col items-center justify-center text-center">
           <ClipboardList className="w-6 h-6 text-amber-500 mb-2" />
           <span className="text-2xl font-serif font-bold">{pendingRequestsCount}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Pending Requests</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Bekleyen Talepler</span>
         </div>
         <div className="glass rounded-xl p-4 flex flex-col items-center justify-center text-center">
           <CheckSquare className="w-6 h-6 text-emerald-500 mb-2" />
           <span className="text-2xl font-serif font-bold">{activeTasksCount}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Active Tasks</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Aktif Görevler</span>
         </div>
         <div className="glass rounded-xl p-4 flex flex-col items-center justify-center text-center">
           <Martini className="w-6 h-6 text-purple-400 mb-2" />
           <span className="text-2xl font-serif font-bold">12</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Cocktails</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Kokteyller</span>
         </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-8">
-        {/* Recent Announcements */}
+        {/* Son Duyurular */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-serif text-xl font-semibold flex items-center gap-2">
-              <Bell className="w-5 h-5 text-primary" /> Recent Announcements
+              <Bell className="w-5 h-5 text-primary" /> Son Duyurular
             </h2>
             <Link href="/announcements" className="text-sm text-primary hover:text-primary/80 flex items-center gap-1">
-              View All <ArrowRight className="w-4 h-4" />
+              Tümünü Gör <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
           <div className="space-y-3">
             {announcementsLoading ? (
               <div className="glass p-6 rounded-xl animate-pulse h-24" />
             ) : announcements.length === 0 ? (
-              <div className="glass p-6 rounded-xl text-center text-muted-foreground text-sm">No recent announcements</div>
+              <div className="glass p-6 rounded-xl text-center text-muted-foreground text-sm">
+                Henüz duyuru yok
+              </div>
             ) : (
               announcements.map((ann: any) => (
                 <div key={ann.id} className="glass glass-hover p-4 rounded-xl">
@@ -90,10 +93,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Quick Actions */}
+        {/* Hızlı İşlemler */}
         <div className="space-y-4">
           <h2 className="font-serif text-xl font-semibold flex items-center gap-2">
-            <Martini className="w-5 h-5 text-primary" /> Quick Actions
+            <Martini className="w-5 h-5 text-primary" /> Hızlı İşlemler
           </h2>
           <div className="grid gap-3">
             <Link href="/cocktails">
@@ -102,7 +105,7 @@ export default function Dashboard() {
                   <div className="p-2 bg-primary/10 rounded-lg text-primary">
                     <Martini className="w-5 h-5" />
                   </div>
-                  <span className="font-medium">Browse Cocktails</span>
+                  <span className="font-medium">Kokteylleri İncele</span>
                 </div>
                 <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
               </div>
@@ -114,7 +117,7 @@ export default function Dashboard() {
                   <div className="p-2 bg-amber-500/10 rounded-lg text-amber-500">
                     <ClipboardList className="w-5 h-5" />
                   </div>
-                  <span className="font-medium">Make a Request</span>
+                  <span className="font-medium">Talep Oluştur</span>
                 </div>
                 <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-amber-500 transition-colors" />
               </div>
@@ -126,7 +129,7 @@ export default function Dashboard() {
                   <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500">
                     <MessageSquare className="w-5 h-5" />
                   </div>
-                  <span className="font-medium">Message a Member</span>
+                  <span className="font-medium">Üyeye Mesaj Gönder</span>
                 </div>
                 <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-blue-500 transition-colors" />
               </div>
