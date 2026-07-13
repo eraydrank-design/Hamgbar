@@ -16,9 +16,11 @@ export default function Login() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Redirect if already logged in
+  // Redirect once auth + userData are both ready.
+  // Admins go to /admin; everyone else goes to /dashboard.
   if (!loading && user) {
-    setLocation('/dashboard');
+    const dest = userData?.role === 'admin' ? '/admin' : '/dashboard';
+    setLocation(dest);
     return null;
   }
 

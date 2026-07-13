@@ -50,12 +50,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(firebaseUser);
 
           if (firebaseUser) {
+            // Determine role from the authenticated email.
+            // eraydrank@gmail.com is always admin; every other account is staff.
+            const ADMIN_EMAILS = ['eraydrank@gmail.com'];
+            const assignedRole = ADMIN_EMAILS.includes(
+              (firebaseUser.email ?? '').toLowerCase(),
+            )
+              ? 'admin'
+              : 'staff';
+
             const payload: Record<string, unknown> = {
               uid: firebaseUser.uid,
               email: firebaseUser.email ?? null,
               displayName: firebaseUser.displayName ?? 'Guest',
               photoURL: firebaseUser.photoURL ?? '',
-              role: 'staff',
+              role: assignedRole,
               createdAt: serverTimestamp(),
             };
 
