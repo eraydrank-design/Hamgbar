@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import {
   onAuthStateChanged,
   User,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 interface AuthContextType {
@@ -21,89 +21,102 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
 });
 
-/** Race a promise against a hard timeout. */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`Firestore timed out after ${ms}ms`)),
-        ms,
-      ),
+      setTimeout(() => reject(new Error(`Firestore timed out after ${ms}ms`)), ms),
     ),
   ]);
 }
 
+const ADMIN_EMAILS = ['eraydrank@gmail.com'];
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [userData, setUserData] = useState<Record<string, unknown> | null>(
-    null,
-  );
+  const [userData, setUserData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Holds the Firestore onSnapshot unsubscribe for the current user doc.
+  const unsubDocRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      // Wrap the entire handler so ANY error — sync or async — still
-      // reaches the finally block and clears the loading spinner.
-      (async () => {
-        try {
-          setUser(firebaseUser);
+    const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      // Tear down previous user-doc listener on every auth state change.
+      if (unsubDocRef.current) {
+        unsubDocRef.current();
+        unsubDocRef.current = null;
+      }
 
-          if (firebaseUser) {
-            // Determine role from the authenticated email.
-            // eraydrank@gmail.com is always admin; every other account is staff.
-            const ADMIN_EMAILS = ['eraydrank@gmail.com'];
-            const assignedRole = ADMIN_EMAILS.includes(
-              (firebaseUser.email ?? '').toLowerCase(),
-            )
-              ? 'admin'
-              : 'staff';
+      setUser(firebaseUser);
 
-            const payload: Record<string, unknown> = {
+      if (!firebaseUser) {
+        setUserData(null);
+        setLoading(false);
+        return;
+      }
+
+      // Assign role from email.
+      const assignedRole = ADMIN_EMAILS.includes(
+        (firebaseUser.email ?? '').toLowerCase(),
+      )
+        ? 'admin'
+        : 'staff';
+
+      const userDocRef = doc(db, 'users', firebaseUser.uid);
+
+      // Upsert: always update auth-derived fields + role.
+      // joinedAt is included with merge:true so it is only written when absent.
+      try {
+        await withTimeout(
+          setDoc(
+            userDocRef,
+            {
               uid: firebaseUser.uid,
               email: firebaseUser.email ?? null,
-              displayName: firebaseUser.displayName ?? 'Guest',
+              displayName: firebaseUser.displayName ?? 'Misafir',
               photoURL: firebaseUser.photoURL ?? '',
               role: assignedRole,
-              createdAt: serverTimestamp(),
-            };
+              joinedAt: serverTimestamp(),
+            },
+            { merge: true },
+          ),
+          5000,
+        );
+      } catch (err) {
+        console.warn('Firestore upsert skipped (offline / timeout):', err);
+      }
 
-            // Upsert the user document. merge:true creates it when absent,
-            // merges it when present. setDoc writes are queued locally and
-            // never throw "client is offline". Timeout guards against hangs.
-            try {
-              const userDocRef = doc(db, 'users', firebaseUser.uid);
-              await withTimeout(
-                setDoc(userDocRef, payload, { merge: true }),
-                5000,
-              );
-            } catch (firestoreErr) {
-              console.warn(
-                'Firestore upsert skipped (offline / timeout):',
-                firestoreErr,
-              );
-              // Non-fatal — we still have the payload from Firebase Auth.
-            }
-
-            setUserData(payload);
+      // Real-time listener: any Firestore write to the user doc (e.g. profile
+      // edits) automatically refreshes userData everywhere in the app.
+      unsubDocRef.current = onSnapshot(
+        userDocRef,
+        (snap) => {
+          if (snap.exists()) {
+            setUserData({ id: snap.id, ...snap.data() } as Record<string, unknown>);
           } else {
             setUserData(null);
           }
-        } catch (err) {
-          // Outer catch: something unexpected blew up (bad Firestore init,
-          // network race, etc.). Log it and fall through to finally.
-          console.error('AuthProvider: unexpected error in auth handler', err);
-        } finally {
-          // ALWAYS clear loading — this is the only place it must be set.
           setLoading(false);
-        }
-      })();
+        },
+        (err) => {
+          console.error('User doc listener error:', err);
+          setLoading(false);
+        },
+      );
     });
 
-    return unsubscribe;
+    return () => {
+      unsubAuth();
+      if (unsubDocRef.current) unsubDocRef.current();
+    };
   }, []);
 
   const signOut = async () => {
+    if (unsubDocRef.current) {
+      unsubDocRef.current();
+      unsubDocRef.current = null;
+    }
     await firebaseSignOut(auth);
     setUser(null);
     setUserData(null);
