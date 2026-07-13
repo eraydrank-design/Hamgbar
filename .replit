@@ -18,3 +18,14 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+VITE_FIREBASE_API_KEY = "AIzaSyDlxqtb8XlBmI28Rz9NfjqYXHdvO36i1Ik"
+VITE_FIREBASE_APP_ID = "1:238279325274:web:00b19444c22a6fff290a63"
+VITE_FIREBASE_AUTH_DOMAIN = "hangbar-be018.firebaseapp.com"
+VITE_FIREBASE_MEASUREMENT_ID = "G-7M4W4B9QCW"
+VITE_FIREBASE_MESSAGING_SENDER_ID = "238279325274"
+VITE_FIREBASE_PROJECT_ID = "hangbar-be018"
+VITE_FIREBASE_STORAGE_BUCKET = "hangbar-be018.firebasestorage.app"

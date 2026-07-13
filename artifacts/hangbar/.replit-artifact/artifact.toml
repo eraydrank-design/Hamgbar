@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "HangBar"
+version = "1.0.0"
+id = "artifacts/hangbar"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 26046
+
+[services.development]
+run = "pnpm --filter @workspace/hangbar run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/hangbar", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/hangbar/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "26046"
+BASE_PATH = "/"
