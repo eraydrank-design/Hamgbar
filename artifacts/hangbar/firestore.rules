@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isStaffOrAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['staff', 'admin'];
+    }
+
+    // ── Users ───────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── Cocktails ────────────────────────────────────────────────────────────
+    match /cocktails/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── Announcements ────────────────────────────────────────────────────────
+    match /announcements/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isStaffOrAdmin();
+    }
+
+    // ── Tasks ────────────────────────────────────────────────────────────────
+    match /tasks/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isStaffOrAdmin();
+    }
+
+    // ── Requests ─────────────────────────────────────────────────────────────
+    match /requests/{doc} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isStaffOrAdmin();
+    }
+
+    // ── Posts ─────────────────────────────────────────────────────────────────
+    match /posts/{doc} {
+      allow read: if isSignedIn();
+      allow create: if isStaffOrAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // ── Cocktail Submissions ──────────────────────────────────────────────────
+    match /cocktailSubmissions/{doc} {
+      allow read: if isStaffOrAdmin();
+      allow create: if isStaffOrAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── Messages ──────────────────────────────────────────────────────────────
+    match /messages/{doc} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // ── Rules ─────────────────────────────────────────────────────────────────
+    match /rules/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── Badges ───────────────────────────────────────────────────────────────
+    match /badges/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

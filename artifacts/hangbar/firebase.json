@@ -1,0 +1,12 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": [
+    {
+      "bucket": "hangbar-be018.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ]
+}

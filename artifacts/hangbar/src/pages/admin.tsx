@@ -4,13 +4,14 @@ import { useState, useRef } from 'react';
 import {
   Shield, Users, Martini, ShieldAlert, Trash2, User,
   Plus, Edit2, X, Loader2, Save, Upload, ImageIcon,
-  Star, CheckCircle, XCircle, Award,
+  Star, CheckCircle, XCircle, Award, Activity, RefreshCw,
 } from 'lucide-react';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { arrayUnion, arrayRemove, increment, where } from 'firebase/firestore';
+import { checkFirebaseStatus, type FirebaseStatus } from '@/lib/firebase-status';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -100,21 +101,23 @@ export default function Admin() {
   const closeModal = () => { if (isSaving || uploadProgress !== null) return; setModalOpen(false); setEditingId(null); setForm(EMPTY_FORM); };
   const setF = (field: keyof CocktailForm, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) { toast.error('Dosya boyutu 8 MB\'ı geçemez.'); return; }
-    setUploadProgress(0);
-    const task = uploadBytesResumable(ref(storage, `cocktail-images/${Date.now()}_${file.name}`), file);
-    task.on('state_changed',
-      (snap) => setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
-      (err) => { console.error(err); toast.error('Görsel yüklenemedi.'); setUploadProgress(null); },
-      async () => {
-        try { const url = await getDownloadURL(task.snapshot.ref); setF('imageURL', url); toast.success('Görsel yüklendi.'); }
-        catch { toast.error('Görsel URL alınamadı.'); }
-        finally { setUploadProgress(null); if (fileInputRef.current) fileInputRef.current.value = ''; }
-      },
-    );
+    setUploadProgress(1); // show spinner
+    try {
+      const snapshot = await uploadBytes(ref(storage, `cocktail-images/${Date.now()}_${file.name}`), file);
+      const url = await getDownloadURL(snapshot.ref);
+      setF('imageURL', url);
+      toast.success('Görsel yüklendi.');
+    } catch (err: any) {
+      console.error('Görsel yükleme hatası:', err);
+      toast.error(`Görsel yüklenemedi: ${err?.code ?? err?.message ?? 'Bilinmeyen hata'}`);
+    } finally {
+      setUploadProgress(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleSaveCocktail = async (e: React.FormEvent) => {
@@ -215,12 +218,29 @@ export default function Admin() {
     finally { setProcessingId(null); }
   };
 
+  // ── Diagnostics state ─────────────────────────────────────────
+  const [diagStatus, setDiagStatus] = useState<FirebaseStatus | null>(null);
+  const [isDiagRunning, setIsDiagRunning] = useState(false);
+
+  const runDiagnostics = async () => {
+    setIsDiagRunning(true);
+    setDiagStatus(null);
+    try {
+      const result = await checkFirebaseStatus();
+      setDiagStatus(result);
+    } catch (err: any) {
+      toast.error(`Tanılama başarısız: ${err?.message}`);
+    } finally {
+      setIsDiagRunning(false);
+    }
+  };
+
   // ── Shared input style ────────────────────────────────────────
 
   const inputCls = 'w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-4 text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-sm';
   const labelCls = 'block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5';
 
-  const tabs = ['Genel Bakış', 'Kullanıcılar', 'Kokteyller', 'Rozetler', 'Onaylar'];
+  const tabs = ['Genel Bakış', 'Kullanıcılar', 'Kokteyller', 'Rozetler', 'Onaylar', 'Sistem Durumu'];
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -248,6 +268,12 @@ export default function Admin() {
               <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-black text-[9px] font-bold rounded-full flex items-center justify-center">
                 {submissions.length}
               </span>
+            )}
+                {tab === 'Sistem Durumu' && diagStatus && (
+              <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-black ${
+                [diagStatus.firestoreRead, diagStatus.firestoreWrite, diagStatus.storageWrite].every(s => s.ok)
+                  ? 'bg-emerald-500' : 'bg-destructive'
+              }`} />
             )}
           </button>
         ))}
@@ -572,6 +598,179 @@ export default function Admin() {
             )}
           </div>
         )}
+
+        {/* ── Sistem Durumu ── */}
+        {activeTab === 'Sistem Durumu' && (
+          <div className="space-y-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-serif text-xl font-bold mb-1 flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-primary" /> Firebase Bağlantı Tanılaması
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Firestore ve Storage bağlantısını gerçek zamanlı olarak test eder ve tam hata kodlarını gösterir.
+                </p>
+              </div>
+              <button
+                onClick={runDiagnostics}
+                disabled={isDiagRunning}
+                className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors disabled:opacity-60 shadow-[0_0_12px_rgba(201,168,76,0.25)]"
+              >
+                {isDiagRunning
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Çalışıyor...</>
+                  : <><RefreshCw className="w-4 h-4" /> Testi Çalıştır</>
+                }
+              </button>
+            </div>
+
+            {!diagStatus && !isDiagRunning && (
+              <div className="glass rounded-2xl p-10 text-center border border-dashed border-white/10">
+                <Activity className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-40" />
+                <p className="text-muted-foreground text-sm">
+                  Firebase bağlantısını test etmek için "Testi Çalıştır" butonuna tıklayın.
+                </p>
+              </div>
+            )}
+
+            {isDiagRunning && (
+              <div className="glass rounded-2xl p-10 text-center">
+                <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto mb-4" />
+                <p className="text-sm text-muted-foreground">Bağlantı test ediliyor...</p>
+              </div>
+            )}
+
+            {diagStatus && (() => {
+              const rows: { label: string; status: typeof diagStatus.auth; desc: string }[] = [
+                { label: 'Firebase Auth', status: diagStatus.auth, desc: 'Oturum açmış kullanıcı durumu' },
+                { label: 'Firestore Okuma', status: diagStatus.firestoreRead, desc: 'Koleksiyondan belge okunabiliyor mu?' },
+                { label: 'Firestore Yazma', status: diagStatus.firestoreWrite, desc: 'Belge oluşturulup silinebiliyor mu?' },
+                { label: 'Storage Yükleme', status: diagStatus.storageWrite, desc: 'Dosya yüklenip silinebiliyor mu?' },
+              ];
+              const allOk = rows.every(r => r.status.ok);
+              return (
+                <div className="space-y-4">
+                  {/* Summary banner */}
+                  <div className={`p-4 rounded-xl border flex items-center gap-3 ${allOk ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-destructive/10 border-destructive/20 text-destructive'}`}>
+                    {allOk
+                      ? <><CheckCircle className="w-5 h-5 flex-shrink-0" /> <span className="font-medium">Tüm Firebase servisleri çalışıyor. Uygulama tam işlevsel.</span></>
+                      : <><XCircle className="w-5 h-5 flex-shrink-0" /> <span className="font-medium">Bir veya daha fazla servis yapılandırılmamış. Aşağıdaki hata kodlarını inceleyin.</span></>
+                    }
+                  </div>
+
+                  {/* Service rows */}
+                  <div className="glass rounded-2xl border border-white/10 overflow-hidden">
+                    {rows.map((row, i) => (
+                      <div key={row.label} className={`flex items-start gap-4 p-5 ${i < rows.length - 1 ? 'border-b border-white/5' : ''}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${row.status.ok ? 'bg-emerald-500/20' : 'bg-destructive/20'}`}>
+                          {row.status.ok
+                            ? <CheckCircle className="w-4 h-4 text-emerald-500" />
+                            : <XCircle className="w-4 h-4 text-destructive" />
+                          }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="font-medium text-sm">{row.label}</span>
+                            {row.status.latencyMs !== undefined && row.status.ok && (
+                              <span className="text-xs text-muted-foreground">{row.status.latencyMs} ms</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{row.desc}</p>
+                          {!row.status.ok && (
+                            <div className="mt-2 space-y-1">
+                              {row.status.error && (
+                                <code className="block text-xs bg-destructive/10 border border-destructive/20 text-destructive rounded px-2 py-1">
+                                  Kod: {row.status.error}
+                                </code>
+                              )}
+                              {row.status.detail && (
+                                <p className="text-xs text-muted-foreground break-words">{row.status.detail}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Fix instructions when not all OK */}
+                  {!allOk && (
+                    <div className="glass p-6 rounded-2xl border border-amber-500/20 space-y-4">
+                      <h4 className="font-serif font-bold text-amber-400 flex items-center gap-2">
+                        <Shield className="w-5 h-5" /> Kurulum Adımları
+                      </h4>
+                      {(diagStatus.firestoreRead.error === 'not-found' || diagStatus.firestoreWrite.error?.includes('not-found') || diagStatus.firestoreRead.detail?.includes('does not exist')) && (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-amber-300">1. Firestore veritabanı oluşturulmamış</p>
+                          <a
+                            href="https://console.firebase.google.com/project/hangbar-be018/firestore"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block text-xs text-primary underline underline-offset-2 hover:text-primary/80"
+                          >
+                            Firebase Console → Firestore → "Create database" →
+                          </a>
+                          <p className="text-xs text-muted-foreground">Production mode seçin, europe-west bölgesini seçin.</p>
+                        </div>
+                      )}
+                      {(diagStatus.firestoreWrite.error === 'permission-denied') && (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-amber-300">Firestore Güvenlik Kuralları kısıtlı</p>
+                          <a
+                            href="https://console.firebase.google.com/project/hangbar-be018/firestore/rules"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block text-xs text-primary underline underline-offset-2"
+                          >
+                            Firestore Rules sayfasına git →
+                          </a>
+                          <p className="text-xs text-muted-foreground">Proje dizinindeki <code className="bg-white/10 px-1 rounded">firestore.rules</code> dosyasının içeriğini yapıştırın.</p>
+                        </div>
+                      )}
+                      {(diagStatus.storageWrite.error === 'storage/unknown' || diagStatus.storageWrite.error?.includes('not-found') || diagStatus.storageWrite.detail?.includes('Not Found')) && (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-amber-300">2. Firebase Storage oluşturulmamış</p>
+                          <a
+                            href="https://console.firebase.google.com/project/hangbar-be018/storage"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block text-xs text-primary underline underline-offset-2"
+                          >
+                            Firebase Console → Storage → "Get started" →
+                          </a>
+                          <p className="text-xs text-muted-foreground">Production mode seçin, aynı bölgeyi seçin.</p>
+                        </div>
+                      )}
+                      {(diagStatus.storageWrite.error === 'storage/unauthorized') && (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-amber-300">Storage Güvenlik Kuralları kısıtlı</p>
+                          <a
+                            href={`https://console.firebase.google.com/project/hangbar-be018/storage/hangbar-be018.firebasestorage.app/rules`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block text-xs text-primary underline underline-offset-2"
+                          >
+                            Storage Rules sayfasına git →
+                          </a>
+                          <p className="text-xs text-muted-foreground">Proje dizinindeki <code className="bg-white/10 px-1 rounded">storage.rules</code> dosyasının içeriğini yapıştırın.</p>
+                        </div>
+                      )}
+                      <div className="pt-3 border-t border-white/10">
+                        <p className="text-xs text-muted-foreground">
+                          Tam kurulum talimatları için proje dizinindeki{' '}
+                          <code className="bg-white/10 px-1 rounded">FIREBASE_SETUP.md</code> dosyasını inceleyin.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground text-right">
+                    Test zamanı: {diagStatus.checkedAt.toLocaleTimeString('tr-TR')}
+                  </p>
+                </div>
+              );
+            })()}
+          </div>
+        )}
       </div>
 
       {/* ── Cocktail Modal ─────────────────────────────────────────────────── */}
@@ -652,7 +851,7 @@ export default function Admin() {
                       )}
                       <div className="flex-1">
                         <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadProgress !== null} className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm hover:bg-white/10 transition-colors disabled:opacity-60">
-                          {uploadProgress !== null ? <><Loader2 className="w-4 h-4 animate-spin" /> Yükleniyor %{uploadProgress}</> : <><Upload className="w-4 h-4" /> Görsel Yükle</>}
+                          {uploadProgress !== null ? <><Loader2 className="w-4 h-4 animate-spin" /> Yükleniyor...</> : <><Upload className="w-4 h-4" /> Görsel Yükle</>}
                         </button>
                         <p className="text-xs text-muted-foreground mt-2">JPG, PNG veya WEBP · Maks. 8 MB</p>
                         <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleImageUpload} />

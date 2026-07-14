@@ -2,7 +2,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useDocument } from '@/hooks/use-firestore';
 import { useState, useEffect, useRef } from 'react';
 import { User, Camera, Save, Shield, Calendar, Edit2, Loader2, X } from 'lucide-react';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import { toast } from 'sonner';
 
@@ -41,36 +41,20 @@ export default function Profile() {
       return;
     }
 
-    setUploadProgress(0);
-    const storageRef = ref(storage, `profile-photos/${user.uid}/${Date.now()}_${file.name}`);
-    const uploadTask = uploadBytesResumable(storageRef, file);
-
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-        setUploadProgress(pct);
-      },
-      (err) => {
-        console.error('Fotoğraf yükleme hatası:', err);
-        toast.error('Fotoğraf yüklenemedi. Lütfen tekrar deneyin.');
-        setUploadProgress(null);
-      },
-      async () => {
-        try {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
-          await update({ photoURL: url });
-          toast.success('Profil fotoğrafı güncellendi.');
-        } catch (err) {
-          console.error('Fotoğraf URL kaydedilemedi:', err);
-          toast.error('Fotoğraf kaydedilemedi.');
-        } finally {
-          setUploadProgress(null);
-          // Reset file input so the same file can be re-selected if needed
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-      },
-    );
+    setUploadProgress(1); // show spinner
+    try {
+      const storageRef = ref(storage, `profile-photos/${user.uid}/${Date.now()}_${file.name}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(snapshot.ref);
+      await update({ photoURL: url });
+      toast.success('Profil fotoğrafı güncellendi.');
+    } catch (err: any) {
+      console.error('Fotoğraf yükleme hatası:', err);
+      toast.error(`Fotoğraf yüklenemedi: ${err?.code ?? err?.message ?? 'Bilinmeyen hata'}`);
+    } finally {
+      setUploadProgress(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   // ── Profile save ──────────────────────────────────────────────

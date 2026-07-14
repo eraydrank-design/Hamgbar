@@ -5,7 +5,7 @@ import { Search, Martini, Bell, Calendar, Plus, X, Camera, Loader2, User } from 
 import { Link } from 'wouter';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -37,28 +37,25 @@ export default function Explore() {
   const loading = cocktailsLoading || announcementsLoading || postsLoading;
 
   // ── Image upload ─────────────────────────────────────────────────────────
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) { toast.error('Dosya boyutu 10 MB\'ı geçemez.'); return; }
 
-    setUploadProgress(0);
-    const storageRef = ref(storage, `explore-posts/${user?.uid}/${Date.now()}_${file.name}`);
-    const task = uploadBytesResumable(storageRef, file);
-
-    task.on(
-      'state_changed',
-      (snap) => setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
-      (err) => { console.error(err); toast.error('Görsel yüklenemedi.'); setUploadProgress(null); },
-      async () => {
-        try {
-          const url = await getDownloadURL(task.snapshot.ref);
-          setImageURL(url);
-          toast.success('Görsel yüklendi.');
-        } catch { toast.error('Görsel URL alınamadı.'); }
-        finally { setUploadProgress(null); if (fileInputRef.current) fileInputRef.current.value = ''; }
-      },
-    );
+    setUploadProgress(1); // show spinner
+    try {
+      const storageRef = ref(storage, `explore-posts/${user?.uid}/${Date.now()}_${file.name}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(snapshot.ref);
+      setImageURL(url);
+      toast.success('Görsel yüklendi.');
+    } catch (err: any) {
+      console.error('Görsel yükleme hatası:', err);
+      toast.error(`Görsel yüklenemedi: ${err?.code ?? err?.message ?? 'Bilinmeyen hata'}`);
+    } finally {
+      setUploadProgress(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   // ── Submit post ──────────────────────────────────────────────────────────
