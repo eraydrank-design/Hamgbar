@@ -12,6 +12,17 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+// ── DEBUG: log runtime config so we can see what the browser actually receives ──
+console.log('[FIREBASE DEBUG] import.meta.env keys:', Object.keys(import.meta.env));
+console.log('[FIREBASE DEBUG] firebaseConfig at runtime:', {
+  apiKey:            firebaseConfig.apiKey            ? `${String(firebaseConfig.apiKey).slice(0, 8)}…` : 'UNDEFINED',
+  authDomain:        firebaseConfig.authDomain        ?? 'UNDEFINED',
+  projectId:         firebaseConfig.projectId         ?? 'UNDEFINED',
+  storageBucket:     firebaseConfig.storageBucket     ?? 'UNDEFINED',
+  messagingSenderId: firebaseConfig.messagingSenderId ?? 'UNDEFINED',
+  appId:             firebaseConfig.appId             ? `${String(firebaseConfig.appId).slice(0, 12)}…` : 'UNDEFINED',
+});
+
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
