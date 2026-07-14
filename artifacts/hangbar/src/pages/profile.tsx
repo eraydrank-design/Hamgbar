@@ -73,9 +73,12 @@ export default function Profile() {
       });
       setIsEditing(false);
       toast.success('Profil başarıyla kaydedildi.');
-    } catch (err) {
-      console.error('Profil güncellenemedi:', err);
-      toast.error('Profil kaydedilemedi. Lütfen tekrar deneyin.');
+    } catch (err: any) {
+      console.error('[PROFILE] ❌ updateDoc users failed');
+      console.error('[PROFILE]    code   :', err?.code    ?? 'no-code');
+      console.error('[PROFILE]    message:', err?.message ?? String(err));
+      console.error('[PROFILE]    stack  :', err?.stack);
+      toast.error(`Profil kaydedilemedi: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
     } finally {
       setIsSaving(false);
     }

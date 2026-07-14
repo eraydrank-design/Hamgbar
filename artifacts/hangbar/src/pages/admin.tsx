@@ -136,7 +136,13 @@ export default function Admin() {
       if (editingId) { await updateCocktail(editingId, payload); toast.success('Kokteyl güncellendi.'); }
       else { await addCocktail(payload); toast.success('Kokteyl eklendi.'); }
       closeModal();
-    } catch (err) { console.error(err); toast.error('Kokteyl kaydedilemedi.'); }
+    } catch (err: any) {
+      console.error('[ADMIN] ❌ addDoc/updateDoc cocktails failed');
+      console.error('[ADMIN]    code   :', err?.code    ?? 'no-code');
+      console.error('[ADMIN]    message:', err?.message ?? String(err));
+      console.error('[ADMIN]    stack  :', err?.stack);
+      toast.error(`Kokteyl kaydedilemedi: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+    }
     finally { setIsSaving(false); }
   };
 
@@ -144,13 +150,21 @@ export default function Admin() {
     if (!window.confirm(`"${name}" adlı kokteyli silmek istediğinizden emin misiniz?`)) return;
     setDeletingId(id);
     try { await removeCocktail(id); toast.success('Kokteyl silindi.'); }
-    catch { toast.error('Kokteyl silinemedi.'); }
+    catch (err: any) {
+      console.error('[ADMIN] ❌ deleteDoc cocktails failed');
+      console.error('[ADMIN]    code   :', err?.code ?? 'no-code');
+      console.error('[ADMIN]    message:', err?.message ?? String(err));
+      toast.error(`Kokteyl silinemedi: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+    }
     finally { setDeletingId(null); }
   };
 
   const toggleAvailability = async (id: string, current: boolean) => {
     try { await updateCocktail(id, { available: !current }); }
-    catch { toast.error('Durum güncellenemedi.'); }
+    catch (err: any) {
+      console.error('[ADMIN] ❌ updateDoc cocktails (availability) failed:', err?.code, err?.message);
+      toast.error(`Durum güncellenemedi: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+    }
   };
 
   // ── User helpers ──────────────────────────────────────────────
@@ -158,7 +172,10 @@ export default function Admin() {
   const handleRoleChange = async (userId: string, newRole: string) => {
     if (userId === userData?.uid) return;
     try { await updateUser(userId, { role: newRole }); toast.success('Rol güncellendi.'); }
-    catch { toast.error('Rol güncellenemedi.'); }
+    catch (err: any) {
+      console.error('[ADMIN] ❌ updateDoc users (role) failed:', err?.code, err?.message);
+      toast.error(`Rol güncellenemedi: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+    }
   };
 
   // ── Badge helpers ─────────────────────────────────────────────
@@ -171,7 +188,10 @@ export default function Admin() {
       await addBadge({ emoji: badgeEmoji, name: badgeName.trim() });
       setBadgeName('');
       toast.success('Rozet oluşturuldu.');
-    } catch { toast.error('Rozet oluşturulamadı.'); }
+    } catch (err: any) {
+      console.error('[ADMIN] ❌ addDoc badges failed:', err?.code, err?.message);
+      toast.error(`Rozet oluşturulamadı: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+    }
     finally { setIsSavingBadge(false); }
   };
 
@@ -186,7 +206,10 @@ export default function Admin() {
         badges: arrayUnion({ id: badge.id, emoji: badge.emoji, name: badge.name }),
       });
       toast.success('Rozet atandı.');
-    } catch { toast.error('Rozet atanamadı.'); }
+    } catch (err: any) {
+      console.error('[ADMIN] ❌ updateDoc users (badge assign) failed:', err?.code, err?.message);
+      toast.error(`Rozet atanamadı: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+    }
     finally { setIsAssigning(false); }
   };
 
@@ -194,7 +217,10 @@ export default function Admin() {
     try {
       await updateUser(userId, { badges: arrayRemove({ id: badge.id, emoji: badge.emoji, name: badge.name }) });
       toast.success('Rozet kaldırıldı.');
-    } catch { toast.error('Rozet kaldırılamadı.'); }
+    } catch (err: any) {
+      console.error('[ADMIN] ❌ updateDoc users (badge remove) failed:', err?.code, err?.message);
+      toast.error(`Rozet kaldırılamadı: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+    }
   };
 
   // ── Submission helpers ────────────────────────────────────────
@@ -205,7 +231,13 @@ export default function Admin() {
       await updateSubmission(sub.id, { status: 'approved' });
       await updateUser(sub.submittedBy, { cocktailCount: increment(1) });
       toast.success(`${sub.submittedByName} onaylandı! Sayaç artırıldı.`);
-    } catch (err) { console.error(err); toast.error('Onaylama başarısız.'); }
+    } catch (err: any) {
+      console.error('[ADMIN] ❌ updateDoc cocktailSubmissions/users (approve) failed');
+      console.error('[ADMIN]    code   :', err?.code    ?? 'no-code');
+      console.error('[ADMIN]    message:', err?.message ?? String(err));
+      console.error('[ADMIN]    stack  :', err?.stack);
+      toast.error(`Onaylama başarısız: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+    }
     finally { setProcessingId(null); }
   };
 
@@ -214,7 +246,10 @@ export default function Admin() {
     try {
       await updateSubmission(sub.id, { status: 'rejected' });
       toast.success('Gönderim reddedildi.');
-    } catch { toast.error('Reddetme başarısız.'); }
+    } catch (err: any) {
+      console.error('[ADMIN] ❌ updateDoc cocktailSubmissions (reject) failed:', err?.code, err?.message);
+      toast.error(`Reddetme başarısız: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+    }
     finally { setProcessingId(null); }
   };
 

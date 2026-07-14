@@ -92,9 +92,12 @@ export default function Explore() {
       setCaption('');
       setCocktailName('');
       setImageURL('');
-    } catch (err) {
-      console.error(err);
-      toast.error('Gönderi paylaşılamadı. Lütfen tekrar deneyin.');
+    } catch (err: any) {
+      console.error('[EXPLORE] ❌ addDoc posts / cocktailSubmissions failed');
+      console.error('[EXPLORE]    code   :', err?.code    ?? 'no-code');
+      console.error('[EXPLORE]    message:', err?.message ?? String(err));
+      console.error('[EXPLORE]    stack  :', err?.stack);
+      toast.error(`Gönderi paylaşılamadı: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
     } finally {
       setIsSubmitting(false);
     }

@@ -12,6 +12,7 @@ interface AuthContextType {
   userData: Record<string, unknown> | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  firestoreError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -19,6 +20,7 @@ const AuthContext = createContext<AuthContextType>({
   userData: null,
   loading: true,
   signOut: async () => {},
+  firestoreError: null,
 });
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -36,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
   // Holds the Firestore onSnapshot unsubscribe for the current user doc.
   const unsubDocRef = useRef<(() => void) | null>(null);
@@ -68,10 +71,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Only write profile fields (displayName, photoURL) for NEW users.
       // For existing users, only sync role + email so user-edited profile
       // data is never overwritten on login/refresh.
+      setFirestoreError(null);
       try {
+        console.log('[AUTH DEBUG] Calling getDoc for uid:', firebaseUser.uid);
         const existing = await withTimeout(getDoc(userDocRef), 5000);
+        console.log('[AUTH DEBUG] getDoc resolved — exists:', existing.exists());
+
         if (!existing.exists()) {
           // New user — write full profile seeded from Firebase Auth.
+          console.log('[AUTH DEBUG] New user — calling setDoc (full profile)');
           await withTimeout(
             setDoc(userDocRef, {
               uid: firebaseUser.uid,
@@ -86,9 +94,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }),
             5000,
           );
+          console.log('[AUTH DEBUG] setDoc (new user) completed');
         } else {
           // Existing user — only sync auth-managed fields, never touch
           // displayName / photoURL / username / bio (user may have edited them).
+          console.log('[AUTH DEBUG] Existing user — calling setDoc (merge: true)');
           await withTimeout(
             setDoc(
               userDocRef,
@@ -97,9 +107,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ),
             5000,
           );
+          console.log('[AUTH DEBUG] setDoc (existing user merge) completed');
         }
-      } catch (err) {
-        console.warn('Firestore upsert skipped (offline / timeout):', err);
+      } catch (err: any) {
+        const code    = err?.code    ?? 'no-code';
+        const message = err?.message ?? String(err);
+        console.error('[AUTH DEBUG] ❌ Firestore upsert FAILED');
+        console.error('[AUTH DEBUG]    code   :', code);
+        console.error('[AUTH DEBUG]    message:', message);
+        console.error('[AUTH DEBUG]    stack  :', err?.stack);
+        setFirestoreError(`[${code}] ${message}`);
+        setLoading(false);
+        return; // stop — do not attach the onSnapshot listener on a broken DB
       }
 
       // Real-time listener: any Firestore write to the user doc (e.g. profile
@@ -114,8 +133,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           setLoading(false);
         },
-        (err) => {
-          console.error('User doc listener error:', err);
+        (err: any) => {
+          const code    = err?.code    ?? 'no-code';
+          const message = err?.message ?? String(err);
+          console.error('[AUTH DEBUG] ❌ onSnapshot user doc FAILED');
+          console.error('[AUTH DEBUG]    code   :', code);
+          console.error('[AUTH DEBUG]    message:', message);
+          console.error('[AUTH DEBUG]    stack  :', err?.stack);
+          setFirestoreError(`[onSnapshot] [${code}] ${message}`);
           setLoading(false);
         },
       );
@@ -138,7 +163,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, userData, loading, signOut }}>
+    <AuthContext.Provider value={{ user, userData, loading, signOut, firestoreError }}>
+      {firestoreError && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
+          background: '#7f1d1d', color: '#fecaca', fontFamily: 'monospace',
+          fontSize: '13px', padding: '10px 16px', borderBottom: '2px solid #dc2626',
+          display: 'flex', alignItems: 'flex-start', gap: '8px', whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+        }}>
+          <span style={{ flexShrink: 0, fontWeight: 'bold' }}>🔥 FIREBASE ERROR</span>
+          <span>{firestoreError}</span>
+          <button
+            onClick={() => setFirestoreError(null)}
+            style={{ marginLeft: 'auto', flexShrink: 0, background: 'transparent', border: 'none', color: '#fca5a5', cursor: 'pointer', fontSize: '16px' }}
+          >✕</button>
+        </div>
+      )}
       {children}
     </AuthContext.Provider>
   );

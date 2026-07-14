@@ -57,8 +57,12 @@ export default function Messages() {
         createdAt: serverTimestamp(),
         read: false,
       });
-    } catch (error) {
-      console.error('Mesaj gönderilemedi:', error);
+    } catch (error: any) {
+      console.error('[MESSAGES] ❌ addDoc messages failed');
+      console.error('[MESSAGES]    code   :', error?.code    ?? 'no-code');
+      console.error('[MESSAGES]    message:', error?.message ?? String(error));
+      console.error('[MESSAGES]    stack  :', error?.stack);
+      toast.error(`Mesaj gönderilemedi: [${error?.code ?? 'hata'}] ${error?.message ?? String(error)}`);
     }
   };
 

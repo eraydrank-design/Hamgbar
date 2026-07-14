@@ -55,9 +55,12 @@ export default function Requests() {
       setFormType('Table Service');
       setIsAdding(false);
       toast.success('Talebiniz başarıyla gönderildi.');
-    } catch (err) {
-      console.error('Talep gönderilemedi:', err);
-      toast.error('Talep gönderilemedi. Lütfen tekrar deneyin.');
+    } catch (err: any) {
+      console.error('[REQUESTS] ❌ addDoc requests failed');
+      console.error('[REQUESTS]    code   :', err?.code    ?? 'no-code');
+      console.error('[REQUESTS]    message:', err?.message ?? String(err));
+      console.error('[REQUESTS]    stack  :', err?.stack);
+      toast.error(`Talep gönderilemedi: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -68,9 +71,12 @@ export default function Requests() {
     try {
       await update(id, { status });
       toast.success(status === 'approved' ? 'Talep onaylandı.' : 'Talep reddedildi.');
-    } catch (err) {
-      console.error('Durum güncellenemedi:', err);
-      toast.error('İşlem gerçekleştirilemedi. Lütfen tekrar deneyin.');
+    } catch (err: any) {
+      console.error('[REQUESTS] ❌ updateDoc requests failed');
+      console.error('[REQUESTS]    code   :', err?.code    ?? 'no-code');
+      console.error('[REQUESTS]    message:', err?.message ?? String(err));
+      console.error('[REQUESTS]    stack  :', err?.stack);
+      toast.error(`Durum güncellenemedi: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
     } finally {
       setUpdatingId(null);
     }

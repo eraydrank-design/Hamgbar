@@ -26,8 +26,11 @@ export function useCollection<T>(path: string, constraints: QueryConstraint[] = 
       })) as T[];
       setData(result);
       setLoading(false);
-    }, (error) => {
-      console.error(`Error fetching collection ${path}:`, error);
+    }, (error: any) => {
+      console.error(`[FIRESTORE] ❌ onSnapshot collection "${path}" FAILED`);
+      console.error('[FIRESTORE]    code   :', error?.code    ?? 'no-code');
+      console.error('[FIRESTORE]    message:', error?.message ?? String(error));
+      console.error('[FIRESTORE]    stack  :', error?.stack);
       setLoading(false);
     });
 
@@ -68,8 +71,11 @@ export function useDocument<T>(path: string, id: string) {
         setData(null);
       }
       setLoading(false);
-    }, (error) => {
-      console.error(`Error fetching document ${path}/${id}:`, error);
+    }, (error: any) => {
+      console.error(`[FIRESTORE] ❌ onSnapshot document "${path}/${id}" FAILED`);
+      console.error('[FIRESTORE]    code   :', error?.code    ?? 'no-code');
+      console.error('[FIRESTORE]    message:', error?.message ?? String(error));
+      console.error('[FIRESTORE]    stack  :', error?.stack);
       setLoading(false);
     });
 
