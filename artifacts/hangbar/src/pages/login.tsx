@@ -75,7 +75,6 @@ export default function Login() {
       {/* Decorative background elements */}
       <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-primary/20 rounded-full blur-[120px]" />
       <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-primary/10 rounded-full blur-[100px]" />
-
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -84,7 +83,7 @@ export default function Login() {
       >
         <div className="text-center mb-8">
           <GlassWater className="w-12 h-12 text-primary mx-auto mb-4" />
-          <h1 className="font-serif text-4xl font-bold text-gradient-gold tracking-widest uppercase mb-2">HangBar</h1>
+          <h1 className="font-serif text-4xl font-bold text-gradient-gold tracking-widest uppercase mb-2">HANGOVER</h1>
           <p className="text-muted-foreground text-sm tracking-widest uppercase">Yalnızca Üyeler</p>
         </div>
 

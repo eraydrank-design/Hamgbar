@@ -77,7 +77,7 @@ export function useDocument<T>(path: string, id: string) {
   }, [path, id]);
 
   const update = async (data: any) => {
-    if (!id) return;
+    if (!id) throw new Error('Belge kimliği eksik — güncelleme yapılamadı');
     const ref = doc(db, path, id);
     return await updateDoc(ref, data);
   };
