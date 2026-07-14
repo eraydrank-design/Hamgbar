@@ -164,11 +164,16 @@ export default function Profile() {
 
             <span className="text-xs text-muted-foreground">Fotoğrafın üzerine gelip tıkla</span>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium uppercase tracking-wider">
                 <Shield className="w-3.5 h-3.5" />
                 {roleName === 'admin' ? 'Yönetici' : roleName === 'staff' ? 'Personel' : (roleName ?? 'Üye')}
               </span>
+              {Array.isArray(userData?.badges) && (userData.badges as any[]).map((b: any, i: number) => (
+                <span key={i} className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white/5 border border-white/20 text-foreground text-xs font-medium">
+                  {b.emoji} {b.name}
+                </span>
+              ))}
             </div>
           </div>
 

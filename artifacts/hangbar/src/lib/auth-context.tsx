@@ -4,7 +4,7 @@ import {
   User,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
-import { doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 interface AuthContextType {
@@ -65,24 +65,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const userDocRef = doc(db, 'users', firebaseUser.uid);
 
-      // Upsert: always update auth-derived fields + role.
-      // joinedAt is included with merge:true so it is only written when absent.
+      // Only write profile fields (displayName, photoURL) for NEW users.
+      // For existing users, only sync role + email so user-edited profile
+      // data is never overwritten on login/refresh.
       try {
-        await withTimeout(
-          setDoc(
-            userDocRef,
-            {
+        const existing = await withTimeout(getDoc(userDocRef), 5000);
+        if (!existing.exists()) {
+          // New user — write full profile seeded from Firebase Auth.
+          await withTimeout(
+            setDoc(userDocRef, {
               uid: firebaseUser.uid,
               email: firebaseUser.email ?? null,
               displayName: firebaseUser.displayName ?? 'Misafir',
               photoURL: firebaseUser.photoURL ?? '',
+              username: '',
               role: assignedRole,
               joinedAt: serverTimestamp(),
-            },
-            { merge: true },
-          ),
-          5000,
-        );
+              cocktailCount: 0,
+              badges: [],
+            }),
+            5000,
+          );
+        } else {
+          // Existing user — only sync auth-managed fields, never touch
+          // displayName / photoURL / username / bio (user may have edited them).
+          await withTimeout(
+            setDoc(
+              userDocRef,
+              { uid: firebaseUser.uid, email: firebaseUser.email ?? null, role: assignedRole },
+              { merge: true },
+            ),
+            5000,
+          );
+        }
       } catch (err) {
         console.warn('Firestore upsert skipped (offline / timeout):', err);
       }

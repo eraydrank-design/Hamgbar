@@ -1,0 +1,274 @@
+HangBar v1.0 Stability Patch
+
+IMPORTANT
+
+Do NOT redesign the UI.
+Do NOT modify the visual design.
+Do NOT change authentication unless required to fix a bug.
+Do NOT remove existing features.
+Focus ONLY on fixing bugs and making the application stable.
+
+==================================
+FULL PROJECT AUDIT
+==================================
+
+Perform a complete audit of the entire project.
+
+Check every page, every component and every Firebase interaction.
+
+Search for:
+
+- Runtime errors
+- Broken buttons
+- Infinite loading states
+- Firestore read/write failures
+- Missing async handling
+- Undefined variables
+- Missing Firestore documents
+- Missing Firebase Storage uploads
+- State not updating
+- Data disappearing after refresh
+- Broken navigation
+
+Fix every issue you find.
+
+==================================
+DATABASE
+==================================
+
+Firestore must become the single source of truth.
+
+Never use temporary state as permanent storage.
+
+Everything must persist after:
+
+- Refresh
+- Logout
+- Login
+- Browser restart
+
+==================================
+USERS
+==================================
+
+When a user signs in:
+
+If users/{uid} does not exist:
+
+Create it automatically.
+
+Fields:
+
+uid
+
+email
+
+displayName
+
+username
+
+photoURL
+
+role
+
+createdAt
+
+updatedAt
+
+If email == eraydrank@gmail.com
+
+role = admin
+
+otherwise
+
+role = staff
+
+==================================
+ADMIN PANEL
+==================================
+
+Admin must see every registered user.
+
+Display:
+
+Profile Photo
+
+Name
+
+Username
+
+Email
+
+Role
+
+Created Date
+
+Admin can:
+
+Change Role
+
+Delete User
+
+Deactivate User
+
+View Profile
+
+New users must appear automatically.
+
+==================================
+PROFILE
+==================================
+
+Fix profile editing.
+
+Saving:
+
+Name
+
+Username
+
+Photo
+
+must update Firestore.
+
+Profile must stay correct after refresh.
+
+Profile photos must upload to Firebase Storage.
+
+==================================
+REQUESTS
+==================================
+
+Fix request creation.
+
+Every request must save to Firestore.
+
+Admin receives all requests.
+
+Admin can:
+
+Approve
+
+Reject
+
+Delete
+
+==================================
+COCKTAILS
+==================================
+
+Fix cocktail management.
+
+Admin can:
+
+Create
+
+Edit
+
+Delete
+
+Upload Image
+
+Images -> Firebase Storage
+
+Data -> Firestore
+
+Cocktails remain after refresh.
+
+==================================
+EXPLORE
+==================================
+
+Users can create posts.
+
+Posts contain:
+
+Photo
+
+Caption
+
+Cocktail
+
+Date
+
+User
+
+Posts save permanently.
+
+==================================
+BUTTONS
+==================================
+
+Audit every button.
+
+No button may remain inactive.
+
+Every button must execute its intended action.
+
+==================================
+LOADING
+==================================
+
+Remove every infinite loading state.
+
+Every async function must use:
+
+try
+
+catch
+
+finally
+
+Loading must always stop.
+
+==================================
+ERROR HANDLING
+==================================
+
+Replace crashes with proper user-friendly messages.
+
+Never leave the application frozen.
+
+==================================
+FINAL VALIDATION
+==================================
+
+Before finishing:
+
+Test:
+
+Google Login
+
+Admin Login
+
+Staff Login
+
+Profile
+
+Requests
+
+Cocktails
+
+Explore
+
+Navigation
+
+Buttons
+
+Firestore writes
+
+Firestore reads
+
+Firebase Storage uploads
+
+Refresh persistence
+
+Fix every failing test.
+
+Do not stop until every critical bug is resolved.
+
+Finally provide a report listing:
+
+- Files modified
+- Bugs fixed
+- Remaining issues (if any)

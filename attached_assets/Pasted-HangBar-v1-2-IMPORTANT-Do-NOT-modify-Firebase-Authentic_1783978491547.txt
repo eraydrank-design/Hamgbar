@@ -1,0 +1,210 @@
+HangBar v1.2
+
+IMPORTANT
+
+Do NOT modify:
+- Firebase Authentication
+- Login Flow
+- Firestore Initialization
+- Routing
+- Existing working authentication
+
+Only implement the requested features.
+
+==================================
+CRITICAL BUG FIXES
+==================================
+
+1. Cocktail Management
+
+The admin still cannot add cocktails.
+
+Fix the entire cocktail management system.
+
+Admin must be able to:
+
+- Add Cocktail
+- Edit Cocktail
+- Delete Cocktail
+
+Every cocktail must save correctly into Firestore.
+
+Fields:
+
+- Name
+- Category
+- Ingredients
+- Preparation
+- Garnish
+- Glass Type
+- Ice Type
+- Alcohol Level
+- Image
+- Notes
+
+Images must upload to Firebase Storage.
+
+==================================
+
+2. Profile Saving
+
+After editing the profile and refreshing the page, everything returns to the old values.
+
+Fix persistence.
+
+Name
+Username
+Profile Photo
+
+must always be loaded from Firestore after refresh.
+
+Never use temporary local state as the main source.
+
+==================================
+
+3. Profile Photo
+
+Uploading works but the new image is never displayed.
+
+Fix image upload.
+
+After upload:
+
+- Save image URL
+- Update Firestore
+- Reload profile
+- Refresh avatar immediately
+
+==================================
+
+4. Explore
+
+Users cannot create posts.
+
+Create a complete Explore system.
+
+Each employee can post:
+
+- Photo
+- Caption
+- Cocktail Name
+- Date
+
+Posts are stored in Firestore.
+
+==================================
+
+5. Admin Badges
+
+Admin can create badges.
+
+Examples:
+
+🥇 En Hızlı Barmen
+
+🍸 Kokteyl Ustası
+
+⭐ Ayın Personeli
+
+🔥 MVP
+
+Admin can assign or remove badges from users.
+
+Badges appear on profile pages.
+
+==================================
+
+6. Cocktail Statistics
+
+Create a statistics system.
+
+Employee uploads a cocktail photo.
+
+Flow:
+
+Employee
+↓
+
+Upload Cocktail Photo
+
+↓
+
+Pending Review
+
+↓
+
+Admin receives notification
+
+↓
+
+Admin Approves or Rejects
+
+↓
+
+If approved:
+
+Increase employee cocktail count.
+
+Leaderboard:
+
+🥇 Eray — 3
+
+🥈 Mehmet — 2
+
+🥉 Ahmet — 1
+
+==================================
+
+Admin Notification Panel
+
+New menu:
+
+Pending Approvals
+
+Show:
+
+Employee Name
+
+Cocktail Photo
+
+Cocktail Name
+
+Date
+
+Buttons:
+
+Approve
+
+Reject
+
+==================================
+
+Dashboard
+
+Show:
+
+Top Employees
+
+Latest Approved Cocktails
+
+Pending Requests
+
+Pending Cocktail Reviews
+
+==================================
+
+GENERAL
+
+Everything must save correctly in Firestore.
+
+Never lose data after refresh.
+
+Do not break authentication.
+
+Do not introduce new runtime errors.
+
+Only modify files related to these features.
+
+Test every feature before finishing.
+
+When finished, provide a report listing every modified file.
