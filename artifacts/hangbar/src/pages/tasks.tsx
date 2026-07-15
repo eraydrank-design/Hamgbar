@@ -1,7 +1,6 @@
 import { useAuth } from '@/lib/auth-context';
 import { useCollection } from '@/hooks/use-firestore';
 import { useState } from 'react';
-import { orderBy } from 'firebase/firestore';
 import { CheckSquare, Plus, Clock, User, Check, Play, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -17,11 +16,11 @@ const PRIORITY_LABELS: Record<string, string> = {
 export default function Tasks() {
   const { userData } = useAuth();
   const isAdmin = userData?.role === 'admin';
-  
-  const { data: tasks, loading, add, update, remove } = useCollection('tasks', [
-    orderBy('dueDate', 'asc')
-  ]);
-  const { data: users } = useCollection('users');
+
+  const { data: tasks, loading, add, update } = useCollection('tasks', {
+    orderBy: { column: 'due_date', ascending: true },
+  });
+  const { data: users } = useCollection('profiles');
 
   const staffMembers = users.filter((u: any) => u.role === 'admin' || u.role === 'staff');
 
@@ -45,16 +44,17 @@ export default function Tasks() {
     await add({
       title: formTitle,
       description: formDesc,
-      assignedTo: formAssignee,
+      assigned_to: formAssignee || null,
       priority: formPriority,
       status: 'pending',
-      dueDate: formDate ? new Date(formDate) : null,
-      createdBy: userData?.displayName,
+      due_date: formDate ? new Date(formDate).toISOString() : null,
+      created_by: userData?.display_name,
     });
     setIsAdding(false);
     setFormTitle('');
     setFormDesc('');
     setFormAssignee('');
+    setFormDate('');
   };
 
   const updateStatus = async (id: string, currentStatus: string) => {
@@ -73,6 +73,12 @@ export default function Tasks() {
       case 'medium': return 'text-amber-500 border-amber-500/50 bg-amber-500/10';
       default: return 'text-primary border-primary/50 bg-primary/10';
     }
+  };
+
+  const fmtDueDate = (d: string | null | undefined) => {
+    if (!d) return null;
+    try { return format(new Date(d), 'd MMM', { locale: tr }); }
+    catch { return null; }
   };
 
   return (
@@ -128,7 +134,7 @@ export default function Tasks() {
                     >
                       <option value="">Herkese Açık</option>
                       {staffMembers.map((u: any) => (
-                        <option key={u.id} value={u.id}>{u.displayName}</option>
+                        <option key={u.id} value={u.id}>{u.display_name}</option>
                       ))}
                     </select>
                   </div>
@@ -142,11 +148,10 @@ export default function Tasks() {
                     />
                   </div>
                 </div>
-
                 <div>
                   <label className="block text-[10px] uppercase text-muted-foreground mb-2">Öncelik</label>
                   <div className="flex gap-2">
-                    {priorities.map(p => (
+                    {priorities.map((p) => (
                       <button
                         key={p}
                         onClick={() => setFormPriority(p)}
@@ -159,7 +164,6 @@ export default function Tasks() {
                     ))}
                   </div>
                 </div>
-
                 <div className="flex justify-end gap-2 pt-2">
                   <button onClick={() => setIsAdding(false)} className="px-4 py-2 rounded-lg text-muted-foreground hover:bg-white/5">
                     İptal
@@ -175,7 +179,7 @@ export default function Tasks() {
       </AnimatePresence>
 
       <div className="flex-1 grid md:grid-cols-3 gap-6 overflow-hidden pb-4">
-        {columns.map(col => {
+        {columns.map((col) => {
           const colTasks = tasks.filter((t: any) => t.status === col.id);
           return (
             <div key={col.id} className="flex flex-col glass rounded-2xl bg-black/20 p-4 overflow-hidden border border-white/5">
@@ -183,7 +187,6 @@ export default function Tasks() {
                 <h3 className="font-serif text-lg font-bold text-foreground">{col.title}</h3>
                 <span className="bg-white/10 text-muted-foreground px-2 py-0.5 rounded text-xs font-mono">{colTasks.length}</span>
               </div>
-              
               <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
                 {colTasks.length === 0 ? (
                   <div className="h-24 flex items-center justify-center border border-dashed border-white/10 rounded-xl text-sm text-muted-foreground">
@@ -191,14 +194,14 @@ export default function Tasks() {
                   </div>
                 ) : (
                   colTasks.map((task: any) => {
-                    const assignee = users.find((u: any) => u.id === task.assignedTo);
+                    const assignee = users.find((u: any) => u.id === task.assigned_to);
+                    const dueDateStr = fmtDueDate(task.due_date);
                     return (
                       <div key={task.id} className="glass p-4 rounded-xl border border-white/10 hover:border-white/20 transition-all group">
                         <div className="flex justify-between items-start mb-2">
                           <span className={`text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border ${getPriorityColor(task.priority)}`}>
                             {PRIORITY_LABELS[task.priority] || task.priority}
                           </span>
-                          
                           <button
                             onClick={() => updateStatus(task.id, task.status)}
                             className="w-6 h-6 rounded flex items-center justify-center bg-white/5 hover:bg-primary/20 hover:text-primary transition-colors text-muted-foreground"
@@ -206,19 +209,17 @@ export default function Tasks() {
                             {task.status === 'pending' ? <Play className="w-3 h-3" /> : task.status === 'in_progress' ? <Check className="w-4 h-4" /> : <Clock className="w-3 h-3" />}
                           </button>
                         </div>
-                        
                         <h4 className="font-medium text-foreground mb-1 leading-tight">{task.title}</h4>
                         {task.description && <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{task.description}</p>}
-                        
                         <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/5">
                           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                             <User className="w-3 h-3" />
-                            <span className="truncate max-w-[100px]">{assignee?.displayName || 'Herkese Açık'}</span>
+                            <span className="truncate max-w-[100px]">{assignee?.display_name || 'Herkese Açık'}</span>
                           </div>
-                          {task.dueDate && (
+                          {dueDateStr && (
                             <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                               <Calendar className="w-3 h-3" />
-                              {format(task.dueDate.toDate ? task.dueDate.toDate() : new Date(task.dueDate), 'd MMM', { locale: tr })}
+                              {dueDateStr}
                             </div>
                           )}
                         </div>

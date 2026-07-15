@@ -1,6 +1,5 @@
 import { useAuth } from '@/lib/auth-context';
 import { useCollection } from '@/hooks/use-firestore';
-import { limit, orderBy, where } from 'firebase/firestore';
 import { motion } from 'framer-motion';
 import { Bell, MessageSquare, ClipboardList, CheckSquare, Martini, ArrowRight, Trophy, User } from 'lucide-react';
 import { Link } from 'wouter';
@@ -8,27 +7,32 @@ import { Link } from 'wouter';
 export default function Dashboard() {
   const { userData } = useAuth();
 
-  const { data: announcements, loading: announcementsLoading } = useCollection('announcements', [
-    orderBy('createdAt', 'desc'), limit(3),
-  ]);
-  const { data: requests } = useCollection('requests', [orderBy('createdAt', 'desc')]);
-  const { data: tasks } = useCollection('tasks', [orderBy('dueDate', 'asc')]);
-  const { data: pendingSubmissions } = useCollection('cocktailSubmissions', [
-    where('status', '==', 'pending'),
-  ]);
-  const { data: topUsers } = useCollection('users', [
-    orderBy('cocktailCount', 'desc'), limit(5),
-  ]);
+  const { data: announcements, loading: announcementsLoading } = useCollection('announcements', {
+    orderBy: { column: 'created_at', ascending: false },
+    limit: 3,
+  });
+  const { data: requests } = useCollection('requests', {
+    orderBy: { column: 'created_at', ascending: false },
+  });
+  const { data: tasks } = useCollection('tasks', {
+    orderBy: { column: 'due_date', ascending: true },
+  });
+  const { data: pendingSubmissions } = useCollection('cocktail_submissions', {
+    filters: [{ column: 'status', value: 'pending' }],
+  });
+  const { data: topUsers } = useCollection('profiles', {
+    orderBy: { column: 'cocktail_count', ascending: false },
+    limit: 5,
+  });
 
   const pendingRequestsCount = requests.filter(
-    (r: any) => r.status === 'pending' && (userData?.role !== 'member' || r.requestedBy === userData?.uid),
+    (r: any) => r.status === 'pending' && (userData?.role !== 'member' || r.requested_by === userData?.id),
   ).length;
   const activeTasksCount = tasks.filter(
-    (t: any) => t.status !== 'done' && (t.assignedTo === userData?.uid || userData?.role === 'admin'),
+    (t: any) => t.status !== 'done' && (t.assigned_to === userData?.id || userData?.role === 'admin'),
   ).length;
 
   const isAdmin = userData?.role === 'admin';
-
   const medals = ['🥇', '🥈', '🥉'];
 
   return (
@@ -36,7 +40,7 @@ export default function Dashboard() {
       <header className="flex items-end justify-between border-b border-white/10 pb-6">
         <div>
           <h1 className="font-serif text-3xl font-bold text-gradient-gold mb-2">
-            Hoş geldin, {userData?.displayName as string}
+            Hoş geldin, {userData?.display_name as string}
           </h1>
           <p className="text-muted-foreground">Bar açık. Bu gece ne yapmak istersiniz?</p>
         </div>
@@ -68,7 +72,7 @@ export default function Dashboard() {
         ) : (
           <div className="glass rounded-xl p-4 flex flex-col items-center justify-center text-center">
             <Trophy className="w-6 h-6 text-primary mb-2" />
-            <span className="text-2xl font-serif font-bold">{(userData?.cocktailCount as number) ?? 0}</span>
+            <span className="text-2xl font-serif font-bold">{(userData?.cocktail_count as number) ?? 0}</span>
             <span className="text-xs text-muted-foreground uppercase tracking-wider">Kokteyllerim</span>
           </div>
         )}
@@ -77,30 +81,28 @@ export default function Dashboard() {
       <div className="grid md:grid-cols-2 gap-8">
         {/* Liderlik Tablosu */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-serif text-xl font-semibold flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-primary" /> Liderlik Tablosu
-            </h2>
-          </div>
+          <h2 className="font-serif text-xl font-semibold flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-primary" /> Liderlik Tablosu
+          </h2>
           <div className="glass rounded-2xl overflow-hidden border border-white/5">
-            {topUsers.filter((u: any) => (u.cocktailCount ?? 0) > 0).length === 0 ? (
+            {topUsers.filter((u: any) => (u.cocktail_count ?? 0) > 0).length === 0 ? (
               <div className="p-6 text-center text-muted-foreground text-sm">
                 Henüz onaylanan kokteyl yok.
               </div>
             ) : (
               <div className="divide-y divide-white/5">
                 {topUsers
-                  .filter((u: any) => (u.cocktailCount ?? 0) > 0)
+                  .filter((u: any) => (u.cocktail_count ?? 0) > 0)
                   .map((u: any, i: number) => (
                     <div key={u.id} className="flex items-center gap-4 px-5 py-3">
                       <span className="text-xl w-6 text-center">{medals[i] ?? `${i + 1}.`}</span>
                       <div className="w-8 h-8 rounded-full bg-primary/20 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                        {u.photoURL
-                          ? <img src={u.photoURL} alt="" className="w-full h-full object-cover" />
+                        {u.photo_url
+                          ? <img src={u.photo_url} alt="" className="w-full h-full object-cover" />
                           : <User className="w-4 h-4 text-primary" />}
                       </div>
-                      <span className="flex-1 font-medium text-sm truncate">{u.displayName || 'İsimsiz'}</span>
-                      <span className="font-mono font-bold text-primary">{u.cocktailCount}</span>
+                      <span className="flex-1 font-medium text-sm truncate">{u.display_name || 'İsimsiz'}</span>
+                      <span className="font-mono font-bold text-primary">{u.cocktail_count}</span>
                     </div>
                   ))}
               </div>

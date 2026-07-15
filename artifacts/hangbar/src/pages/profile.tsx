@@ -2,8 +2,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useDocument } from '@/hooks/use-firestore';
 import { useState, useEffect, useRef } from 'react';
 import { User, Camera, Save, Shield, Calendar, Edit2, Loader2, X } from 'lucide-react';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 export default function Profile() {
@@ -13,14 +12,14 @@ export default function Profile() {
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { update } = useDocument('users', user?.uid || '');
+  const { update } = useDocument('profiles', user?.id || '');
 
   useEffect(() => {
     if (userData) {
-      setDisplayName((userData.displayName as string) || '');
+      setDisplayName((userData.display_name as string) || '');
       setUsername((userData.username as string) || '');
       setBio((userData.bio as string) || '');
     }
@@ -41,18 +40,22 @@ export default function Profile() {
       return;
     }
 
-    setUploadProgress(1); // show spinner
+    setIsUploading(true);
     try {
-      const storageRef = ref(storage, `profile-photos/${user.uid}/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(snapshot.ref);
-      await update({ photoURL: url });
+      const ext = file.name.split('.').pop();
+      const path = `profile-photos/${user.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from('images').getPublicUrl(path);
+      await update({ photo_url: data.publicUrl });
       toast.success('Profil fotoğrafı güncellendi.');
     } catch (err: any) {
-      console.error('Fotoğraf yükleme hatası:', err);
-      toast.error(`Fotoğraf yüklenemedi: ${err?.code ?? err?.message ?? 'Bilinmeyen hata'}`);
+      toast.error(`Fotoğraf yüklenemedi: ${err?.message ?? 'Bilinmeyen hata'}`);
     } finally {
-      setUploadProgress(null);
+      setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -67,38 +70,31 @@ export default function Profile() {
     setIsSaving(true);
     try {
       await update({
-        displayName: displayName.trim(),
+        display_name: displayName.trim(),
         username: username.trim(),
         bio: bio.trim(),
       });
       setIsEditing(false);
       toast.success('Profil başarıyla kaydedildi.');
     } catch (err: any) {
-      console.error('[PROFILE] ❌ updateDoc users failed');
-      console.error('[PROFILE]    code   :', err?.code    ?? 'no-code');
-      console.error('[PROFILE]    message:', err?.message ?? String(err));
-      console.error('[PROFILE]    stack  :', err?.stack);
-      toast.error(`Profil kaydedilemedi: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+      toast.error(`Profil kaydedilemedi: ${err?.message ?? String(err)}`);
     } finally {
       setIsSaving(false);
     }
   };
 
   const cancelEdit = () => {
-    // Revert to saved values
-    setDisplayName((userData?.displayName as string) || '');
+    setDisplayName((userData?.display_name as string) || '');
     setUsername((userData?.username as string) || '');
     setBio((userData?.bio as string) || '');
     setIsEditing(false);
   };
 
-  const joinDate = (() => {
-    const raw = userData?.joinedAt as any;
-    const d = raw?.toDate?.();
-    return d ? new Date(d).toLocaleDateString('tr-TR') : 'Bilinmiyor';
-  })();
+  const joinDate = userData?.joined_at
+    ? new Date(userData.joined_at as string).toLocaleDateString('tr-TR')
+    : 'Bilinmiyor';
 
-  const photoURL = userData?.photoURL as string | undefined;
+  const photoURL = userData?.photo_url as string | undefined;
   const roleName = userData?.role as string | undefined;
 
   return (
@@ -116,25 +112,21 @@ export default function Profile() {
             <div className="relative group">
               <div className="w-32 h-32 rounded-full bg-black border-2 border-primary/30 flex items-center justify-center overflow-hidden">
                 {photoURL ? (
-                  <img src={photoURL} alt={userData?.displayName as string} className="w-full h-full object-cover" />
+                  <img src={photoURL} alt={userData?.display_name as string} className="w-full h-full object-cover" />
                 ) : (
                   <User className="w-12 h-12 text-primary/50" />
                 )}
               </div>
 
-              {/* Upload overlay — always shown so user can change photo without entering edit mode */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploadProgress !== null}
+                disabled={isUploading}
                 className="absolute inset-0 rounded-full bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer disabled:cursor-not-allowed"
                 title="Fotoğrafı değiştir"
               >
-                {uploadProgress !== null ? (
-                  <>
-                    <Loader2 className="w-7 h-7 text-white animate-spin" />
-                    <span className="text-white text-[10px] mt-1">{uploadProgress}%</span>
-                  </>
+                {isUploading ? (
+                  <Loader2 className="w-7 h-7 text-white animate-spin" />
                 ) : (
                   <Camera className="w-8 h-8 text-white" />
                 )}
@@ -236,7 +228,7 @@ export default function Profile() {
                 <div className="flex justify-between items-start">
                   <div>
                     <h2 className="text-2xl font-serif font-bold text-foreground mb-1">
-                      {(userData?.displayName as string) || 'İsimsiz'}
+                      {(userData?.display_name as string) || 'İsimsiz'}
                     </h2>
                     {userData?.username && (
                       <p className="text-sm text-primary/70 mb-1">@{userData.username as string}</p>
@@ -277,7 +269,7 @@ export default function Profile() {
                     </div>
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">Kullanıcı Kimliği</span>
-                      <span className="text-muted-foreground font-mono text-xs truncate max-w-[180px]">{user?.uid}</span>
+                      <span className="text-muted-foreground font-mono text-xs truncate max-w-[180px]">{user?.id}</span>
                     </div>
                   </div>
                 </div>

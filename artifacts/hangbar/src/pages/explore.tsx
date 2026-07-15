@@ -5,11 +5,9 @@ import { Search, Martini, Bell, Calendar, Plus, X, Camera, Loader2, User } from 
 import { Link } from 'wouter';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { orderBy } from 'firebase/firestore';
 
 type FilterType = 'Tümü' | 'Gönderiler' | 'Kokteyller' | 'Etkinlikler';
 
@@ -29,10 +27,10 @@ export default function Explore() {
 
   const { data: cocktails, loading: cocktailsLoading } = useCollection('cocktails');
   const { data: announcements, loading: announcementsLoading } = useCollection('announcements');
-  const { data: posts, loading: postsLoading, add: addPost } = useCollection('posts', [
-    orderBy('createdAt', 'desc'),
-  ]);
-  const { add: addSubmission } = useCollection('cocktailSubmissions');
+  const { data: posts, loading: postsLoading, add: addPost } = useCollection('posts', {
+    orderBy: { column: 'created_at', ascending: false },
+  });
+  const { add: addSubmission } = useCollection('cocktail_submissions');
 
   const loading = cocktailsLoading || announcementsLoading || postsLoading;
 
@@ -42,16 +40,20 @@ export default function Explore() {
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) { toast.error('Dosya boyutu 10 MB\'ı geçemez.'); return; }
 
-    setUploadProgress(1); // show spinner
+    setUploadProgress(1);
     try {
-      const storageRef = ref(storage, `explore-posts/${user?.uid}/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(snapshot.ref);
-      setImageURL(url);
+      const ext = file.name.split('.').pop();
+      const path = `explore-posts/${user?.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from('images').getPublicUrl(path);
+      setImageURL(data.publicUrl);
       toast.success('Görsel yüklendi.');
     } catch (err: any) {
-      console.error('Görsel yükleme hatası:', err);
-      toast.error(`Görsel yüklenemedi: ${err?.code ?? err?.message ?? 'Bilinmeyen hata'}`);
+      toast.error(`Görsel yüklenemedi: ${err?.message ?? 'Bilinmeyen hata'}`);
     } finally {
       setUploadProgress(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -65,24 +67,22 @@ export default function Explore() {
 
     setIsSubmitting(true);
     try {
-      const post = {
-        authorId: user?.uid,
-        authorName: userData?.displayName,
-        authorPhoto: userData?.photoURL ?? '',
-        imageURL,
+      await addPost({
+        author_id: user?.id,
+        author_name: userData?.display_name,
+        author_photo: userData?.photo_url ?? '',
+        image_url: imageURL,
         caption: caption.trim(),
-        cocktailName: cocktailName.trim(),
-      };
-      await addPost(post);
+        cocktail_name: cocktailName.trim(),
+      });
 
-      // If a cocktail name is provided, also create a pending stat submission.
       if (cocktailName.trim()) {
         await addSubmission({
-          submittedBy: user?.uid,
-          submittedByName: userData?.displayName,
-          submittedByPhoto: userData?.photoURL ?? '',
-          imageURL,
-          cocktailName: cocktailName.trim(),
+          submitted_by: user?.id,
+          submitted_by_name: userData?.display_name,
+          submitted_by_photo: userData?.photo_url ?? '',
+          image_url: imageURL,
+          cocktail_name: cocktailName.trim(),
           status: 'pending',
         });
       }
@@ -93,11 +93,7 @@ export default function Explore() {
       setCocktailName('');
       setImageURL('');
     } catch (err: any) {
-      console.error('[EXPLORE] ❌ addDoc posts / cocktailSubmissions failed');
-      console.error('[EXPLORE]    code   :', err?.code    ?? 'no-code');
-      console.error('[EXPLORE]    message:', err?.message ?? String(err));
-      console.error('[EXPLORE]    stack  :', err?.stack);
-      toast.error(`Gönderi paylaşılamadı: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+      toast.error(`Gönderi paylaşılamadı: ${err?.message ?? String(err)}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -112,18 +108,24 @@ export default function Explore() {
   };
 
   // ── Combine feeds ────────────────────────────────────────────────────────
+  const fmtDate = (d: string | null | undefined, fmt: string) => {
+    if (!d) return null;
+    try { return format(new Date(d), fmt, { locale: tr }); }
+    catch { return null; }
+  };
+
   const combinedData = [
     ...posts.map((p: any) => ({ ...p, _type: 'post' })),
     ...cocktails.map((c: any) => ({ ...c, _type: 'cocktail' })),
     ...announcements.map((a: any) => ({ ...a, _type: 'event' })),
   ].sort((a, b) => {
-    const dA = a.createdAt?.toDate?.()?.getTime() ?? 0;
-    const dB = b.createdAt?.toDate?.()?.getTime() ?? 0;
+    const dA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const dB = b.created_at ? new Date(b.created_at).getTime() : 0;
     return dB - dA;
   });
 
   const filteredData = combinedData.filter((item) => {
-    const text = [item.name, item.title, item.description, item.body, item.caption, item.cocktailName]
+    const text = [item.name, item.title, item.description, item.body, item.caption, item.cocktail_name]
       .join(' ')
       .toLowerCase();
     if (!text.includes(search.toLowerCase())) return false;
@@ -194,28 +196,26 @@ export default function Explore() {
             if (item._type === 'post') {
               return (
                 <div key={`p-${item.id}`} className="glass rounded-2xl overflow-hidden flex flex-col border border-white/5">
-                  {item.imageURL && (
+                  {item.image_url && (
                     <div className="relative w-full" style={{ paddingBottom: '66%' }}>
-                      <img src={item.imageURL} alt={item.cocktailName || 'Gönderi'} className="absolute inset-0 w-full h-full object-cover" />
+                      <img src={item.image_url} alt={item.cocktail_name || 'Gönderi'} className="absolute inset-0 w-full h-full object-cover" />
                     </div>
                   )}
                   <div className="p-4 flex flex-col flex-1">
                     <div className="flex items-center gap-2 mb-3">
                       <div className="w-7 h-7 rounded-full bg-primary/20 overflow-hidden flex-shrink-0">
-                        {item.authorPhoto
-                          ? <img src={item.authorPhoto} alt="" className="w-full h-full object-cover" />
+                        {item.author_photo
+                          ? <img src={item.author_photo} alt="" className="w-full h-full object-cover" />
                           : <User className="w-3.5 h-3.5 m-1.5 text-primary" />}
                       </div>
-                      <span className="text-xs font-medium text-foreground">{item.authorName}</span>
+                      <span className="text-xs font-medium text-foreground">{item.author_name}</span>
                       <span className="text-xs text-muted-foreground ml-auto">
-                        {item.createdAt?.toDate
-                          ? format(item.createdAt.toDate(), 'd MMM', { locale: tr })
-                          : 'Yeni'}
+                        {fmtDate(item.created_at, 'd MMM') ?? 'Yeni'}
                       </span>
                     </div>
-                    {item.cocktailName && (
+                    {item.cocktail_name && (
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-primary uppercase tracking-widest mb-2">
-                        <Martini className="w-3.5 h-3.5" /> {item.cocktailName}
+                        <Martini className="w-3.5 h-3.5" /> {item.cocktail_name}
                       </div>
                     )}
                     <p className="text-sm text-foreground line-clamp-3 flex-1">{item.caption}</p>
@@ -230,8 +230,8 @@ export default function Explore() {
                     <div className="flex items-center gap-2 text-xs font-semibold text-primary uppercase tracking-widest mb-3">
                       <Martini className="w-4 h-4" /> Kokteyl
                     </div>
-                    {item.imageURL && (
-                      <img src={item.imageURL} alt={item.name} className="w-full h-32 object-cover rounded-xl mb-3" />
+                    {item.image_url && (
+                      <img src={item.image_url} alt={item.name} className="w-full h-32 object-cover rounded-xl mb-3" />
                     )}
                     <h3 className="font-serif text-xl font-bold text-foreground group-hover:text-primary transition-colors mb-2">{item.name}</h3>
                     <div className="flex justify-between items-center pt-4 border-t border-white/5 mt-auto">
@@ -242,7 +242,6 @@ export default function Explore() {
                 </Link>
               );
             }
-            // event / announcement
             return (
               <Link key={`e-${item.id}`} href="/announcements">
                 <div className="glass glass-hover p-6 rounded-2xl cursor-pointer group flex flex-col h-full border-t-2 border-t-amber-500/50">
@@ -252,9 +251,7 @@ export default function Explore() {
                   <h3 className="font-serif text-xl font-bold text-foreground group-hover:text-amber-500 transition-colors mb-2">{item.title}</h3>
                   <p className="text-sm text-muted-foreground line-clamp-3 mb-4 flex-1">{item.body}</p>
                   <div className="pt-4 border-t border-white/5 text-xs text-muted-foreground">
-                    {item.createdAt?.toDate
-                      ? format(item.createdAt.toDate(), 'd MMM yyyy', { locale: tr })
-                      : 'Yakın zamanda'}
+                    {fmtDate(item.created_at, 'd MMM yyyy') ?? 'Yakın zamanda'}
                   </div>
                 </div>
               </Link>
@@ -289,7 +286,6 @@ export default function Explore() {
                 </div>
 
                 <div className="p-6 space-y-4">
-                  {/* Image upload area */}
                   <div
                     onClick={() => !uploadProgress && fileInputRef.current?.click()}
                     className="relative w-full rounded-xl border-2 border-dashed border-white/20 overflow-hidden cursor-pointer hover:border-primary/40 transition-colors"
@@ -311,7 +307,7 @@ export default function Explore() {
                         {uploadProgress !== null ? (
                           <>
                             <Loader2 className="w-8 h-8 animate-spin mb-2 text-primary" />
-                            <span className="text-sm">Yükleniyor %{uploadProgress}</span>
+                            <span className="text-sm">Yükleniyor...</span>
                           </>
                         ) : (
                           <>
@@ -325,7 +321,6 @@ export default function Explore() {
                   </div>
                   <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleImageSelect} />
 
-                  {/* Cocktail name */}
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
                       Kokteyl Adı <span className="text-muted-foreground/60 normal-case">(istatistiklere gönderilir)</span>
@@ -339,7 +334,6 @@ export default function Explore() {
                     />
                   </div>
 
-                  {/* Caption */}
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
                       Açıklama <span className="text-destructive">*</span>

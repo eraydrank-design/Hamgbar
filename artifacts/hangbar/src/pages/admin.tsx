@@ -4,33 +4,29 @@ import { useState, useRef } from 'react';
 import {
   Shield, Users, Martini, ShieldAlert, Trash2, User,
   Plus, Edit2, X, Loader2, Save, Upload, ImageIcon,
-  Star, CheckCircle, XCircle, Award, Activity, RefreshCw,
+  Star, CheckCircle, XCircle, Award,
 } from 'lucide-react';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { arrayUnion, arrayRemove, increment, where } from 'firebase/firestore';
-import { checkFirebaseStatus, type FirebaseStatus } from '@/lib/firebase-status';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 interface CocktailForm {
   name: string; category: string; price: string; ingredients: string;
-  preparation: string; garnish: string; glassType: string; iceType: string;
-  alcoholLevel: string; notes: string; available: boolean; imageURL: string;
+  preparation: string; garnish: string; glass_type: string; ice_type: string;
+  alcohol_level: string; notes: string; available: boolean; image_url: string;
 }
 
 const EMPTY_FORM: CocktailForm = {
   name: '', category: 'Signature', price: '', ingredients: '', preparation: '',
-  garnish: '', glassType: '', iceType: 'Küp Buz', alcoholLevel: 'Orta',
-  notes: '', available: true, imageURL: '',
+  garnish: '', glass_type: '', ice_type: 'Küp Buz', alcohol_level: 'Orta',
+  notes: '', available: true, image_url: '',
 };
 
 const CATEGORIES = ['Signature', 'Classic', 'Mocktail', 'Shots', 'Sıcak İçecek', 'Alkolsüz', 'Mevsimlik'];
 const ICE_TYPES = ['Küp Buz', 'Kırma Buz', 'Ezme Buz', 'Yok'];
 const ALCOHOL_LEVELS = ['Alkolsüz', 'Düşük', 'Orta', 'Yüksek'];
-
 const ROLE_LABELS: Record<string, string> = { member: 'Üye', staff: 'Personel', admin: 'Yönetici' };
 
 const PRESET_BADGES = [
@@ -48,21 +44,21 @@ export default function Admin() {
   const { userData } = useAuth();
   const [activeTab, setActiveTab] = useState('Genel Bakış');
 
-  const { data: users, update: updateUser } = useCollection('users');
+  const { data: users, update: updateUser } = useCollection('profiles');
   const { data: requests } = useCollection('requests');
   const { data: tasks } = useCollection('tasks');
   const { data: cocktails, add: addCocktail, update: updateCocktail, remove: removeCocktail } = useCollection('cocktails');
   const { data: badges, add: addBadge, remove: removeBadge } = useCollection('badges');
-  const { data: submissions, update: updateSubmission } = useCollection('cocktailSubmissions', [
-    where('status', '==', 'pending'),
-  ]);
+  const { data: submissions, update: updateSubmission } = useCollection('cocktail_submissions', {
+    filters: [{ column: 'status', value: 'pending' }],
+  });
 
   // ── Cocktail modal state ──
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<CocktailForm>(EMPTY_FORM);
   const [isSaving, setIsSaving] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -92,30 +88,39 @@ export default function Admin() {
     setForm({
       name: c.name ?? '', category: c.category ?? 'Signature', price: c.price?.toString() ?? '',
       ingredients: Array.isArray(c.ingredients) ? c.ingredients.join('\n') : (c.ingredients ?? ''),
-      preparation: c.preparation ?? '', garnish: c.garnish ?? '', glassType: c.glassType ?? '',
-      iceType: c.iceType ?? 'Küp Buz', alcoholLevel: c.alcoholLevel ?? 'Orta',
-      notes: c.notes ?? '', available: c.available ?? true, imageURL: c.imageURL ?? '',
+      preparation: c.preparation ?? '', garnish: c.garnish ?? '', glass_type: c.glass_type ?? '',
+      ice_type: c.ice_type ?? 'Küp Buz', alcohol_level: c.alcohol_level ?? 'Orta',
+      notes: c.notes ?? '', available: c.available ?? true, image_url: c.image_url ?? '',
     });
     setModalOpen(true);
   };
-  const closeModal = () => { if (isSaving || uploadProgress !== null) return; setModalOpen(false); setEditingId(null); setForm(EMPTY_FORM); };
+  const closeModal = () => {
+    if (isSaving || isUploading) return;
+    setModalOpen(false);
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+  };
   const setF = (field: keyof CocktailForm, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) { toast.error('Dosya boyutu 8 MB\'ı geçemez.'); return; }
-    setUploadProgress(1); // show spinner
+    setIsUploading(true);
     try {
-      const snapshot = await uploadBytes(ref(storage, `cocktail-images/${Date.now()}_${file.name}`), file);
-      const url = await getDownloadURL(snapshot.ref);
-      setF('imageURL', url);
+      const ext = file.name.split('.').pop();
+      const path = `cocktail-images/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from('images').getPublicUrl(path);
+      setF('image_url', data.publicUrl);
       toast.success('Görsel yüklendi.');
     } catch (err: any) {
-      console.error('Görsel yükleme hatası:', err);
-      toast.error(`Görsel yüklenemedi: ${err?.code ?? err?.message ?? 'Bilinmeyen hata'}`);
+      toast.error(`Görsel yüklenemedi: ${err?.message ?? 'Bilinmeyen hata'}`);
     } finally {
-      setUploadProgress(null);
+      setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -130,52 +135,44 @@ export default function Admin() {
         name: form.name.trim(), category: form.category, price: Number(form.price),
         ingredients: form.ingredients.split('\n').map((s) => s.trim()).filter(Boolean),
         preparation: form.preparation.trim(), garnish: form.garnish.trim(),
-        glassType: form.glassType.trim(), iceType: form.iceType, alcoholLevel: form.alcoholLevel,
-        notes: form.notes.trim(), available: form.available, imageURL: form.imageURL,
+        glass_type: form.glass_type.trim(), ice_type: form.ice_type,
+        alcohol_level: form.alcohol_level, notes: form.notes.trim(),
+        available: form.available, image_url: form.image_url,
       };
-      if (editingId) { await updateCocktail(editingId, payload); toast.success('Kokteyl güncellendi.'); }
-      else { await addCocktail(payload); toast.success('Kokteyl eklendi.'); }
+      if (editingId) {
+        await updateCocktail(editingId, payload);
+        toast.success('Kokteyl güncellendi.');
+      } else {
+        await addCocktail(payload);
+        toast.success('Kokteyl eklendi.');
+      }
       closeModal();
     } catch (err: any) {
-      console.error('[ADMIN] ❌ addDoc/updateDoc cocktails failed');
-      console.error('[ADMIN]    code   :', err?.code    ?? 'no-code');
-      console.error('[ADMIN]    message:', err?.message ?? String(err));
-      console.error('[ADMIN]    stack  :', err?.stack);
-      toast.error(`Kokteyl kaydedilemedi: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+      toast.error(`Kokteyl kaydedilemedi: ${err?.message ?? String(err)}`);
+    } finally {
+      setIsSaving(false);
     }
-    finally { setIsSaving(false); }
   };
 
   const handleDeleteCocktail = async (id: string, name: string) => {
     if (!window.confirm(`"${name}" adlı kokteyli silmek istediğinizden emin misiniz?`)) return;
     setDeletingId(id);
     try { await removeCocktail(id); toast.success('Kokteyl silindi.'); }
-    catch (err: any) {
-      console.error('[ADMIN] ❌ deleteDoc cocktails failed');
-      console.error('[ADMIN]    code   :', err?.code ?? 'no-code');
-      console.error('[ADMIN]    message:', err?.message ?? String(err));
-      toast.error(`Kokteyl silinemedi: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
-    }
+    catch (err: any) { toast.error(`Kokteyl silinemedi: ${err?.message ?? String(err)}`); }
     finally { setDeletingId(null); }
   };
 
   const toggleAvailability = async (id: string, current: boolean) => {
     try { await updateCocktail(id, { available: !current }); }
-    catch (err: any) {
-      console.error('[ADMIN] ❌ updateDoc cocktails (availability) failed:', err?.code, err?.message);
-      toast.error(`Durum güncellenemedi: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
-    }
+    catch (err: any) { toast.error(`Durum güncellenemedi: ${err?.message ?? String(err)}`); }
   };
 
   // ── User helpers ──────────────────────────────────────────────
 
   const handleRoleChange = async (userId: string, newRole: string) => {
-    if (userId === userData?.uid) return;
+    if (userId === userData?.id) return;
     try { await updateUser(userId, { role: newRole }); toast.success('Rol güncellendi.'); }
-    catch (err: any) {
-      console.error('[ADMIN] ❌ updateDoc users (role) failed:', err?.code, err?.message);
-      toast.error(`Rol güncellenemedi: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
-    }
+    catch (err: any) { toast.error(`Rol güncellenemedi: ${err?.message ?? String(err)}`); }
   };
 
   // ── Badge helpers ─────────────────────────────────────────────
@@ -189,10 +186,10 @@ export default function Admin() {
       setBadgeName('');
       toast.success('Rozet oluşturuldu.');
     } catch (err: any) {
-      console.error('[ADMIN] ❌ addDoc badges failed:', err?.code, err?.message);
-      toast.error(`Rozet oluşturulamadı: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+      toast.error(`Rozet oluşturulamadı: ${err?.message ?? String(err)}`);
+    } finally {
+      setIsSavingBadge(false);
     }
-    finally { setIsSavingBadge(false); }
   };
 
   const handleAssignBadge = async (e: React.FormEvent) => {
@@ -202,24 +199,27 @@ export default function Admin() {
     if (!badge) return;
     setIsAssigning(true);
     try {
-      await updateUser(assignUserId, {
-        badges: arrayUnion({ id: badge.id, emoji: badge.emoji, name: badge.name }),
-      });
+      // Fetch current badges then append
+      const { data: profile } = await supabase.from('profiles').select('badges').eq('id', assignUserId).single();
+      const currentBadges = profile?.badges ?? [];
+      const newBadges = [...currentBadges, { id: badge.id, emoji: badge.emoji, name: badge.name }];
+      await updateUser(assignUserId, { badges: newBadges });
       toast.success('Rozet atandı.');
     } catch (err: any) {
-      console.error('[ADMIN] ❌ updateDoc users (badge assign) failed:', err?.code, err?.message);
-      toast.error(`Rozet atanamadı: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+      toast.error(`Rozet atanamadı: ${err?.message ?? String(err)}`);
+    } finally {
+      setIsAssigning(false);
     }
-    finally { setIsAssigning(false); }
   };
 
   const handleRemoveBadge = async (userId: string, badge: any) => {
     try {
-      await updateUser(userId, { badges: arrayRemove({ id: badge.id, emoji: badge.emoji, name: badge.name }) });
+      const { data: profile } = await supabase.from('profiles').select('badges').eq('id', userId).single();
+      const newBadges = (profile?.badges ?? []).filter((b: any) => b.id !== badge.id);
+      await updateUser(userId, { badges: newBadges });
       toast.success('Rozet kaldırıldı.');
     } catch (err: any) {
-      console.error('[ADMIN] ❌ updateDoc users (badge remove) failed:', err?.code, err?.message);
-      toast.error(`Rozet kaldırılamadı: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+      toast.error(`Rozet kaldırılamadı: ${err?.message ?? String(err)}`);
     }
   };
 
@@ -229,16 +229,16 @@ export default function Admin() {
     setProcessingId(sub.id);
     try {
       await updateSubmission(sub.id, { status: 'approved' });
-      await updateUser(sub.submittedBy, { cocktailCount: increment(1) });
-      toast.success(`${sub.submittedByName} onaylandı! Sayaç artırıldı.`);
+      // Increment cocktail_count for the submitter
+      const { data: profile } = await supabase.from('profiles').select('cocktail_count').eq('id', sub.submitted_by).single();
+      const newCount = (profile?.cocktail_count ?? 0) + 1;
+      await supabase.from('profiles').update({ cocktail_count: newCount }).eq('id', sub.submitted_by);
+      toast.success(`${sub.submitted_by_name} onaylandı! Sayaç artırıldı.`);
     } catch (err: any) {
-      console.error('[ADMIN] ❌ updateDoc cocktailSubmissions/users (approve) failed');
-      console.error('[ADMIN]    code   :', err?.code    ?? 'no-code');
-      console.error('[ADMIN]    message:', err?.message ?? String(err));
-      console.error('[ADMIN]    stack  :', err?.stack);
-      toast.error(`Onaylama başarısız: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
+      toast.error(`Onaylama başarısız: ${err?.message ?? String(err)}`);
+    } finally {
+      setProcessingId(null);
     }
-    finally { setProcessingId(null); }
   };
 
   const handleReject = async (sub: any) => {
@@ -247,26 +247,9 @@ export default function Admin() {
       await updateSubmission(sub.id, { status: 'rejected' });
       toast.success('Gönderim reddedildi.');
     } catch (err: any) {
-      console.error('[ADMIN] ❌ updateDoc cocktailSubmissions (reject) failed:', err?.code, err?.message);
-      toast.error(`Reddetme başarısız: [${err?.code ?? 'hata'}] ${err?.message ?? String(err)}`);
-    }
-    finally { setProcessingId(null); }
-  };
-
-  // ── Diagnostics state ─────────────────────────────────────────
-  const [diagStatus, setDiagStatus] = useState<FirebaseStatus | null>(null);
-  const [isDiagRunning, setIsDiagRunning] = useState(false);
-
-  const runDiagnostics = async () => {
-    setIsDiagRunning(true);
-    setDiagStatus(null);
-    try {
-      const result = await checkFirebaseStatus();
-      setDiagStatus(result);
-    } catch (err: any) {
-      toast.error(`Tanılama başarısız: ${err?.message}`);
+      toast.error(`Reddetme başarısız: ${err?.message ?? String(err)}`);
     } finally {
-      setIsDiagRunning(false);
+      setProcessingId(null);
     }
   };
 
@@ -275,7 +258,13 @@ export default function Admin() {
   const inputCls = 'w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-4 text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-sm';
   const labelCls = 'block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5';
 
-  const tabs = ['Genel Bakış', 'Kullanıcılar', 'Kokteyller', 'Rozetler', 'Onaylar', 'Sistem Durumu'];
+  const tabs = ['Genel Bakış', 'Kullanıcılar', 'Kokteyller', 'Rozetler', 'Onaylar'];
+
+  const fmtDate = (d: string | null | undefined) => {
+    if (!d) return 'Yok';
+    try { return new Date(d).toLocaleDateString('tr-TR'); }
+    catch { return 'Yok'; }
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -303,12 +292,6 @@ export default function Admin() {
               <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-black text-[9px] font-bold rounded-full flex items-center justify-center">
                 {submissions.length}
               </span>
-            )}
-                {tab === 'Sistem Durumu' && diagStatus && (
-              <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-black ${
-                [diagStatus.firestoreRead, diagStatus.firestoreWrite, diagStatus.storageWrite].every(s => s.ok)
-                  ? 'bg-emerald-500' : 'bg-destructive'
-              }`} />
             )}
           </button>
         ))}
@@ -368,24 +351,22 @@ export default function Admin() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-primary/20 overflow-hidden flex items-center justify-center">
-                            {u.photoURL ? <img src={u.photoURL} alt="" className="w-full h-full object-cover" /> : <User className="w-4 h-4 text-primary" />}
+                            {u.photo_url ? <img src={u.photo_url} alt="" className="w-full h-full object-cover" /> : <User className="w-4 h-4 text-primary" />}
                           </div>
                           <div>
-                            <p className="font-medium">{u.displayName || 'İsimsiz'}</p>
+                            <p className="font-medium">{u.display_name || 'İsimsiz'}</p>
                             {u.username && <p className="text-xs text-muted-foreground">@{u.username}</p>}
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-muted-foreground">{u.email}</td>
-                      <td className="px-6 py-4 text-muted-foreground">
-                        {u.joinedAt?.toDate ? new Date(u.joinedAt.toDate()).toLocaleDateString('tr-TR') : 'Yok'}
-                      </td>
-                      <td className="px-6 py-4 text-center font-mono text-primary">{u.cocktailCount ?? 0}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{fmtDate(u.joined_at)}</td>
+                      <td className="px-6 py-4 text-center font-mono text-primary">{u.cocktail_count ?? 0}</td>
                       <td className="px-6 py-4">
                         <select
                           value={u.role}
                           onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                          disabled={u.id === userData?.uid}
+                          disabled={u.id === userData?.id}
                           className="bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs uppercase tracking-wider focus:border-primary/50 disabled:opacity-50 cursor-pointer"
                         >
                           {Object.entries(ROLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -429,15 +410,18 @@ export default function Admin() {
                         <tr key={c.id} className="hover:bg-white/5 transition-colors">
                           <td className="px-6 py-4">
                             <div className="w-10 h-10 rounded-lg bg-primary/10 overflow-hidden flex items-center justify-center border border-white/10">
-                              {c.imageURL ? <img src={c.imageURL} alt={c.name} className="w-full h-full object-cover" /> : <ImageIcon className="w-5 h-5 text-muted-foreground" />}
+                              {c.image_url ? <img src={c.image_url} alt={c.name} className="w-full h-full object-cover" /> : <ImageIcon className="w-5 h-5 text-muted-foreground" />}
                             </div>
                           </td>
                           <td className="px-6 py-4 font-serif font-bold text-base">{c.name}</td>
                           <td className="px-6 py-4 text-muted-foreground text-xs uppercase">{c.category}</td>
                           <td className="px-6 py-4 text-primary font-medium">{c.price} ₺</td>
-                          <td className="px-6 py-4 text-muted-foreground text-xs">{c.alcoholLevel}</td>
+                          <td className="px-6 py-4 text-muted-foreground text-xs">{c.alcohol_level}</td>
                           <td className="px-6 py-4 text-center">
-                            <button onClick={() => toggleAvailability(c.id, c.available)} className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-colors ${c.available ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' : 'bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20'}`}>
+                            <button
+                              onClick={() => toggleAvailability(c.id, c.available)}
+                              className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-colors ${c.available ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20' : 'bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20'}`}
+                            >
                               {c.available ? 'Mevcut' : 'Mevcut Değil'}
                             </button>
                           </td>
@@ -528,7 +512,7 @@ export default function Admin() {
               <form onSubmit={handleAssignBadge} className="flex flex-col sm:flex-row gap-3">
                 <select value={assignUserId} onChange={(e) => setAssignUserId(e.target.value)} className={inputCls + ' flex-1'}>
                   <option value="">Kullanıcı seçin...</option>
-                  {users.map((u: any) => <option key={u.id} value={u.id}>{u.displayName || u.email}</option>)}
+                  {users.map((u: any) => <option key={u.id} value={u.id}>{u.display_name || u.email}</option>)}
                 </select>
                 <select value={assignBadgeId} onChange={(e) => setAssignBadgeId(e.target.value)} className={inputCls + ' flex-1'}>
                   <option value="">Rozet seçin...</option>
@@ -539,12 +523,11 @@ export default function Admin() {
                 </button>
               </form>
 
-              {/* Users with badges */}
               <div className="mt-6 space-y-3">
                 {users.filter((u: any) => Array.isArray(u.badges) && u.badges.length > 0).map((u: any) => (
                   <div key={u.id} className="flex items-start justify-between p-4 bg-white/5 rounded-xl">
                     <div>
-                      <p className="font-medium text-sm mb-2">{u.displayName || u.email}</p>
+                      <p className="font-medium text-sm mb-2">{u.display_name || u.email}</p>
                       <div className="flex flex-wrap gap-1.5">
                         {u.badges.map((b: any, i: number) => (
                           <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 border border-primary/20 rounded-full text-xs text-primary">
@@ -578,38 +561,33 @@ export default function Admin() {
               <div className="space-y-4">
                 {submissions.map((sub: any) => (
                   <div key={sub.id} className="glass p-6 rounded-2xl flex flex-col md:flex-row gap-6">
-                    {/* Photo */}
-                    {sub.imageURL && (
+                    {sub.image_url && (
                       <div className="w-full md:w-40 h-40 rounded-xl overflow-hidden border border-white/10 flex-shrink-0">
-                        <img src={sub.imageURL} alt={sub.cocktailName} className="w-full h-full object-cover" />
+                        <img src={sub.image_url} alt={sub.cocktail_name} className="w-full h-full object-cover" />
                       </div>
                     )}
-                    {/* Info */}
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-3">
                         <div className="w-8 h-8 rounded-full bg-primary/20 overflow-hidden flex items-center justify-center">
-                          {sub.submittedByPhoto
-                            ? <img src={sub.submittedByPhoto} alt="" className="w-full h-full object-cover" />
+                          {sub.submitted_by_photo
+                            ? <img src={sub.submitted_by_photo} alt="" className="w-full h-full object-cover" />
                             : <User className="w-4 h-4 text-primary" />}
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{sub.submittedByName}</p>
+                          <p className="font-medium text-sm">{sub.submitted_by_name}</p>
                           <p className="text-xs text-muted-foreground">
-                            {sub.createdAt?.toDate
-                              ? new Date(sub.createdAt.toDate()).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })
-                              : 'Az önce'}
+                            {sub.created_at ? new Date(sub.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Az önce'}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 mb-2">
                         <Martini className="w-4 h-4 text-primary" />
-                        <span className="font-serif font-bold text-lg">{sub.cocktailName}</span>
+                        <span className="font-serif font-bold text-lg">{sub.cocktail_name}</span>
                       </div>
                       <span className="inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border bg-amber-500/10 text-amber-500 border-amber-500/20">
                         Beklemede
                       </span>
                     </div>
-                    {/* Actions */}
                     <div className="flex md:flex-col gap-2 md:justify-center border-t md:border-t-0 md:border-l border-white/10 pt-4 md:pt-0 md:pl-6">
                       <button
                         onClick={() => handleApprove(sub)}
@@ -633,280 +611,146 @@ export default function Admin() {
             )}
           </div>
         )}
-
-        {/* ── Sistem Durumu ── */}
-        {activeTab === 'Sistem Durumu' && (
-          <div className="space-y-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="font-serif text-xl font-bold mb-1 flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-primary" /> Firebase Bağlantı Tanılaması
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Firestore ve Storage bağlantısını gerçek zamanlı olarak test eder ve tam hata kodlarını gösterir.
-                </p>
-              </div>
-              <button
-                onClick={runDiagnostics}
-                disabled={isDiagRunning}
-                className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors disabled:opacity-60 shadow-[0_0_12px_rgba(201,168,76,0.25)]"
-              >
-                {isDiagRunning
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Çalışıyor...</>
-                  : <><RefreshCw className="w-4 h-4" /> Testi Çalıştır</>
-                }
-              </button>
-            </div>
-
-            {!diagStatus && !isDiagRunning && (
-              <div className="glass rounded-2xl p-10 text-center border border-dashed border-white/10">
-                <Activity className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-40" />
-                <p className="text-muted-foreground text-sm">
-                  Firebase bağlantısını test etmek için "Testi Çalıştır" butonuna tıklayın.
-                </p>
-              </div>
-            )}
-
-            {isDiagRunning && (
-              <div className="glass rounded-2xl p-10 text-center">
-                <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto mb-4" />
-                <p className="text-sm text-muted-foreground">Bağlantı test ediliyor...</p>
-              </div>
-            )}
-
-            {diagStatus && (() => {
-              const rows: { label: string; status: typeof diagStatus.auth; desc: string }[] = [
-                { label: 'Firebase Auth', status: diagStatus.auth, desc: 'Oturum açmış kullanıcı durumu' },
-                { label: 'Firestore Okuma', status: diagStatus.firestoreRead, desc: 'Koleksiyondan belge okunabiliyor mu?' },
-                { label: 'Firestore Yazma', status: diagStatus.firestoreWrite, desc: 'Belge oluşturulup silinebiliyor mu?' },
-                { label: 'Storage Yükleme', status: diagStatus.storageWrite, desc: 'Dosya yüklenip silinebiliyor mu?' },
-              ];
-              const allOk = rows.every(r => r.status.ok);
-              return (
-                <div className="space-y-4">
-                  {/* Summary banner */}
-                  <div className={`p-4 rounded-xl border flex items-center gap-3 ${allOk ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-destructive/10 border-destructive/20 text-destructive'}`}>
-                    {allOk
-                      ? <><CheckCircle className="w-5 h-5 flex-shrink-0" /> <span className="font-medium">Tüm Firebase servisleri çalışıyor. Uygulama tam işlevsel.</span></>
-                      : <><XCircle className="w-5 h-5 flex-shrink-0" /> <span className="font-medium">Bir veya daha fazla servis yapılandırılmamış. Aşağıdaki hata kodlarını inceleyin.</span></>
-                    }
-                  </div>
-
-                  {/* Service rows */}
-                  <div className="glass rounded-2xl border border-white/10 overflow-hidden">
-                    {rows.map((row, i) => (
-                      <div key={row.label} className={`flex items-start gap-4 p-5 ${i < rows.length - 1 ? 'border-b border-white/5' : ''}`}>
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${row.status.ok ? 'bg-emerald-500/20' : 'bg-destructive/20'}`}>
-                          {row.status.ok
-                            ? <CheckCircle className="w-4 h-4 text-emerald-500" />
-                            : <XCircle className="w-4 h-4 text-destructive" />
-                          }
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className="font-medium text-sm">{row.label}</span>
-                            {row.status.latencyMs !== undefined && row.status.ok && (
-                              <span className="text-xs text-muted-foreground">{row.status.latencyMs} ms</span>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">{row.desc}</p>
-                          {!row.status.ok && (
-                            <div className="mt-2 space-y-1">
-                              {row.status.error && (
-                                <code className="block text-xs bg-destructive/10 border border-destructive/20 text-destructive rounded px-2 py-1">
-                                  Kod: {row.status.error}
-                                </code>
-                              )}
-                              {row.status.detail && (
-                                <p className="text-xs text-muted-foreground break-words">{row.status.detail}</p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Fix instructions when not all OK */}
-                  {!allOk && (
-                    <div className="glass p-6 rounded-2xl border border-amber-500/20 space-y-4">
-                      <h4 className="font-serif font-bold text-amber-400 flex items-center gap-2">
-                        <Shield className="w-5 h-5" /> Kurulum Adımları
-                      </h4>
-                      {(diagStatus.firestoreRead.error === 'not-found' || diagStatus.firestoreWrite.error?.includes('not-found') || diagStatus.firestoreRead.detail?.includes('does not exist')) && (
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-amber-300">1. Firestore veritabanı oluşturulmamış</p>
-                          <a
-                            href="https://console.firebase.google.com/project/hangbar-be018/firestore"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-block text-xs text-primary underline underline-offset-2 hover:text-primary/80"
-                          >
-                            Firebase Console → Firestore → "Create database" →
-                          </a>
-                          <p className="text-xs text-muted-foreground">Production mode seçin, europe-west bölgesini seçin.</p>
-                        </div>
-                      )}
-                      {(diagStatus.firestoreWrite.error === 'permission-denied') && (
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-amber-300">Firestore Güvenlik Kuralları kısıtlı</p>
-                          <a
-                            href="https://console.firebase.google.com/project/hangbar-be018/firestore/rules"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-block text-xs text-primary underline underline-offset-2"
-                          >
-                            Firestore Rules sayfasına git →
-                          </a>
-                          <p className="text-xs text-muted-foreground">Proje dizinindeki <code className="bg-white/10 px-1 rounded">firestore.rules</code> dosyasının içeriğini yapıştırın.</p>
-                        </div>
-                      )}
-                      {(diagStatus.storageWrite.error === 'storage/unknown' || diagStatus.storageWrite.error?.includes('not-found') || diagStatus.storageWrite.detail?.includes('Not Found')) && (
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-amber-300">2. Firebase Storage oluşturulmamış</p>
-                          <a
-                            href="https://console.firebase.google.com/project/hangbar-be018/storage"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-block text-xs text-primary underline underline-offset-2"
-                          >
-                            Firebase Console → Storage → "Get started" →
-                          </a>
-                          <p className="text-xs text-muted-foreground">Production mode seçin, aynı bölgeyi seçin.</p>
-                        </div>
-                      )}
-                      {(diagStatus.storageWrite.error === 'storage/unauthorized') && (
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-amber-300">Storage Güvenlik Kuralları kısıtlı</p>
-                          <a
-                            href={`https://console.firebase.google.com/project/hangbar-be018/storage/hangbar-be018.firebasestorage.app/rules`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-block text-xs text-primary underline underline-offset-2"
-                          >
-                            Storage Rules sayfasına git →
-                          </a>
-                          <p className="text-xs text-muted-foreground">Proje dizinindeki <code className="bg-white/10 px-1 rounded">storage.rules</code> dosyasının içeriğini yapıştırın.</p>
-                        </div>
-                      )}
-                      <div className="pt-3 border-t border-white/10">
-                        <p className="text-xs text-muted-foreground">
-                          Tam kurulum talimatları için proje dizinindeki{' '}
-                          <code className="bg-white/10 px-1 rounded">FIREBASE_SETUP.md</code> dosyasını inceleyin.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  <p className="text-xs text-muted-foreground text-right">
-                    Test zamanı: {diagStatus.checkedAt.toLocaleTimeString('tr-TR')}
-                  </p>
-                </div>
-              );
-            })()}
-          </div>
-        )}
       </div>
 
-      {/* ── Cocktail Modal ─────────────────────────────────────────────────── */}
+      {/* ── Cocktail Modal ── */}
       <AnimatePresence>
         {modalOpen && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40" onClick={closeModal} />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }} className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
-              <div className="glass border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-                <div className="flex items-center justify-between p-6 border-b border-white/10 sticky top-0 bg-black/80 backdrop-blur-sm rounded-t-2xl z-10">
-                  <h2 className="font-serif text-2xl font-bold text-gradient-gold">{editingId ? 'Kokteyli Düzenle' : 'Yeni Kokteyl Ekle'}</h2>
-                  <button type="button" onClick={closeModal} disabled={isSaving} className="p-2 text-muted-foreground hover:text-foreground hover:bg-white/10 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50"
+              onClick={closeModal}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="glass w-full max-w-2xl rounded-2xl border border-white/10 shadow-2xl my-8">
+                <div className="flex items-center justify-between p-6 border-b border-white/10">
+                  <h2 className="font-serif text-xl font-bold text-gradient-gold">
+                    {editingId ? 'Kokteyl Düzenle' : 'Yeni Kokteyl'}
+                  </h2>
+                  <button onClick={closeModal} className="p-2 text-muted-foreground hover:text-foreground hover:bg-white/10 rounded-lg transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
-                <form onSubmit={handleSaveCocktail} className="p-6 space-y-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                <form onSubmit={handleSaveCocktail} className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+                  <div className="grid md:grid-cols-2 gap-4">
                     <div>
-                      <label className={labelCls}>Kokteyl Adı <span className="text-destructive">*</span></label>
-                      <input className={inputCls} placeholder="Örn: Dark Velvet" value={form.name} onChange={(e) => setF('name', e.target.value)} required />
+                      <label className={labelCls}>Kokteyl Adı *</label>
+                      <input className={inputCls} placeholder="Kokteyl adı" value={form.name} onChange={(e) => setF('name', e.target.value)} required />
                     </div>
+                    <div>
+                      <label className={labelCls}>Fiyat (₺) *</label>
+                      <input className={inputCls} type="number" placeholder="0" value={form.price} onChange={(e) => setF('price', e.target.value)} required />
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4">
                     <div>
                       <label className={labelCls}>Kategori</label>
                       <select className={inputCls} value={form.category} onChange={(e) => setF('category', e.target.value)}>
-                        {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                        {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                       </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className={labelCls}>Fiyat (₺) <span className="text-destructive">*</span></label>
-                      <input className={inputCls} type="number" min="0" step="0.5" placeholder="0" value={form.price} onChange={(e) => setF('price', e.target.value)} required />
                     </div>
                     <div>
                       <label className={labelCls}>Alkol Seviyesi</label>
-                      <select className={inputCls} value={form.alcoholLevel} onChange={(e) => setF('alcoholLevel', e.target.value)}>
-                        {ALCOHOL_LEVELS.map((a) => <option key={a} value={a}>{a}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={labelCls}>Buz Türü</label>
-                      <select className={inputCls} value={form.iceType} onChange={(e) => setF('iceType', e.target.value)}>
-                        {ICE_TYPES.map((i) => <option key={i} value={i}>{i}</option>)}
+                      <select className={inputCls} value={form.alcohol_level} onChange={(e) => setF('alcohol_level', e.target.value)}>
+                        {ALCOHOL_LEVELS.map((a) => <option key={a}>{a}</option>)}
                       </select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                  <div>
+                    <label className={labelCls}>İçindekiler (her satıra bir tane)</label>
+                    <textarea
+                      className={inputCls}
+                      rows={4}
+                      placeholder={'Vodka\nLimon suyu\nNane yaprakları'}
+                      value={form.ingredients}
+                      onChange={(e) => setF('ingredients', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4">
                     <div>
-                      <label className={labelCls}>Bardak Türü</label>
-                      <input className={inputCls} placeholder="Örn: Rocks, Coupe, Highball" value={form.glassType} onChange={(e) => setF('glassType', e.target.value)} />
+                      <label className={labelCls}>Hazırlanış</label>
+                      <textarea className={inputCls} rows={3} value={form.preparation} onChange={(e) => setF('preparation', e.target.value)} />
                     </div>
                     <div>
                       <label className={labelCls}>Garnitür</label>
-                      <input className={inputCls} placeholder="Örn: Lime dilimleri, Kiraz" value={form.garnish} onChange={(e) => setF('garnish', e.target.value)} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className={labelCls}>İçindekiler (her satıra bir malzeme)</label>
-                    <textarea className={inputCls + ' resize-none'} rows={4} placeholder={'60 ml Bourbon\n20 ml Taze limon suyu'} value={form.ingredients} onChange={(e) => setF('ingredients', e.target.value)} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Hazırlık</label>
-                    <textarea className={inputCls + ' resize-none'} rows={3} placeholder="Yapılış adımları..." value={form.preparation} onChange={(e) => setF('preparation', e.target.value)} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Notlar</label>
-                    <textarea className={inputCls + ' resize-none'} rows={2} placeholder="Özel notlar, alerjen uyarıları..." value={form.notes} onChange={(e) => setF('notes', e.target.value)} />
-                  </div>
-                  {/* Image upload */}
-                  <div>
-                    <label className={labelCls}>Kokteyl Görseli</label>
-                    <div className="flex items-start gap-4">
-                      {form.imageURL ? (
-                        <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-white/10 flex-shrink-0">
-                          <img src={form.imageURL} alt="Önizleme" className="w-full h-full object-cover" />
-                          <button type="button" onClick={() => setF('imageURL', '')} className="absolute top-1 right-1 bg-black/70 rounded-full p-0.5 text-white hover:bg-destructive/80"><X className="w-3 h-3" /></button>
-                        </div>
-                      ) : (
-                        <div className="w-20 h-20 rounded-xl border border-dashed border-white/20 flex items-center justify-center flex-shrink-0 bg-white/5"><ImageIcon className="w-6 h-6 text-muted-foreground" /></div>
-                      )}
-                      <div className="flex-1">
-                        <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadProgress !== null} className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm hover:bg-white/10 transition-colors disabled:opacity-60">
-                          {uploadProgress !== null ? <><Loader2 className="w-4 h-4 animate-spin" /> Yükleniyor...</> : <><Upload className="w-4 h-4" /> Görsel Yükle</>}
-                        </button>
-                        <p className="text-xs text-muted-foreground mt-2">JPG, PNG veya WEBP · Maks. 8 MB</p>
-                        <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleImageUpload} />
+                      <input className={inputCls} value={form.garnish} onChange={(e) => setF('garnish', e.target.value)} />
+                      <div className="mt-3">
+                        <label className={labelCls}>Bardak Türü</label>
+                        <input className={inputCls} value={form.glass_type} onChange={(e) => setF('glass_type', e.target.value)} />
                       </div>
                     </div>
                   </div>
-                  {/* Availability */}
-                  <div className="flex items-center gap-3 pt-2">
-                    <button type="button" onClick={() => setF('available', !form.available)} className={`relative w-12 h-6 rounded-full transition-colors ${form.available ? 'bg-primary' : 'bg-white/20'}`}>
-                      <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.available ? 'translate-x-7' : 'translate-x-1'}`} />
-                    </button>
-                    <span className="text-sm">{form.available ? 'Menüde Mevcut' : 'Menüde Mevcut Değil'}</span>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelCls}>Buz Türü</label>
+                      <select className={inputCls} value={form.ice_type} onChange={(e) => setF('ice_type', e.target.value)}>
+                        {ICE_TYPES.map((i) => <option key={i}>{i}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Notlar</label>
+                      <input className={inputCls} value={form.notes} onChange={(e) => setF('notes', e.target.value)} />
+                    </div>
                   </div>
-                  <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
-                    <button type="button" onClick={closeModal} disabled={isSaving} className="px-4 py-2 rounded-lg text-muted-foreground hover:bg-white/5 transition-colors disabled:opacity-50">İptal</button>
-                    <button type="submit" disabled={isSaving || uploadProgress !== null} className="px-6 py-2 rounded-lg bg-primary text-primary-foreground font-medium flex items-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-60 shadow-[0_0_15px_rgba(201,168,76,0.2)]">
-                      {isSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Kaydediliyor...</> : <><Save className="w-4 h-4" /> {editingId ? 'Güncelle' : 'Ekle'}</>}
+
+                  {/* Image upload */}
+                  <div>
+                    <label className={labelCls}>Görsel</label>
+                    <div className="flex items-center gap-4">
+                      {form.image_url && (
+                        <img src={form.image_url} alt="" className="w-20 h-20 rounded-xl object-cover border border-white/10" />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors disabled:opacity-50"
+                      >
+                        {isUploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Yükleniyor...</> : <><Upload className="w-4 h-4" /> Görsel Seç</>}
+                      </button>
+                      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                    </div>
+                  </div>
+
+                  {/* Availability toggle */}
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setF('available', !form.available)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.available ? 'bg-emerald-500' : 'bg-white/20'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.available ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
+                    <span className="text-sm text-muted-foreground">
+                      {form.available ? 'Mevcut' : 'Mevcut Değil'}
+                    </span>
                   </div>
                 </form>
+
+                <div className="flex justify-end gap-3 p-6 border-t border-white/10">
+                  <button onClick={closeModal} className="px-4 py-2.5 rounded-xl text-muted-foreground hover:bg-white/5 transition-colors">
+                    İptal
+                  </button>
+                  <button
+                    onClick={(e) => handleSaveCocktail(e as any)}
+                    disabled={isSaving}
+                    className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-medium flex items-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-60 shadow-[0_0_15px_rgba(201,168,76,0.25)]"
+                  >
+                    {isSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Kaydediliyor...</> : <><Save className="w-4 h-4" /> {editingId ? 'Güncelle' : 'Ekle'}</>}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </>

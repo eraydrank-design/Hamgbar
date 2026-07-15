@@ -1,46 +1,75 @@
 import { useAuth } from '@/lib/auth-context';
 import { useCollection } from '@/hooks/use-firestore';
 import { useState, useRef, useEffect } from 'react';
-import { orderBy, addDoc, collection, serverTimestamp, query } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { Send, User, Search, MessageSquare } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 export default function Messages() {
   const { userData, user } = useAuth();
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [messageText, setMessageText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  const { data: users, loading: usersLoading } = useCollection('users');
-  
   const [messages, setMessages] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
+  const { data: users, loading: usersLoading } = useCollection('profiles');
+
+  // ── Fetch + subscribe to messages for current conversation ───────────────
   useEffect(() => {
-    if (!user || !selectedUser) return;
+    if (!user || !selectedUser) {
+      setMessages([]);
+      return;
+    }
 
-    const q = query(
-      collection(db, 'messages'),
-      orderBy('createdAt', 'asc')
-    );
-    
-    import('firebase/firestore').then(({ onSnapshot }) => {
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const result = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const conversationMessages = result.filter((m: any) =>
-          (m.senderId === user.uid && m.receiverId === selectedUser.id) ||
-          (m.senderId === selectedUser.id && m.receiverId === user.uid)
-        );
-        setMessages(conversationMessages);
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
-      });
-      return () => unsubscribe();
-    });
-  }, [user, selectedUser]);
+    const fetchMessages = async () => {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(
+          `and(sender_id.eq.${user.id},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${user.id})`,
+        )
+        .order('created_at', { ascending: true });
+
+      if (!error) {
+        setMessages(data ?? []);
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      }
+    };
+
+    fetchMessages();
+
+    // Real-time: listen for new messages in either direction
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
+    const ch = supabase
+      .channel(`messages-${user.id}-${selectedUser.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          const msg = payload.new as any;
+          const relevant =
+            (msg.sender_id === user.id && msg.receiver_id === selectedUser.id) ||
+            (msg.sender_id === selectedUser.id && msg.receiver_id === user.id);
+          if (relevant) {
+            setMessages((prev) => [...prev, msg]);
+            setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+          }
+        },
+      )
+      .subscribe();
+    channelRef.current = ch;
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [user?.id, selectedUser?.id]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,28 +78,31 @@ export default function Messages() {
     const text = messageText;
     setMessageText('');
 
-    try {
-      await addDoc(collection(db, 'messages'), {
-        text,
-        senderId: user.uid,
-        receiverId: selectedUser.id,
-        createdAt: serverTimestamp(),
-        read: false,
-      });
-    } catch (error: any) {
-      console.error('[MESSAGES] ❌ addDoc messages failed');
-      console.error('[MESSAGES]    code   :', error?.code    ?? 'no-code');
-      console.error('[MESSAGES]    message:', error?.message ?? String(error));
-      console.error('[MESSAGES]    stack  :', error?.stack);
-      toast.error(`Mesaj gönderilemedi: [${error?.code ?? 'hata'}] ${error?.message ?? String(error)}`);
+    const { error } = await supabase.from('messages').insert({
+      text,
+      sender_id: user.id,
+      receiver_id: selectedUser.id,
+      read: false,
+    });
+
+    if (error) {
+      toast.error(`Mesaj gönderilemedi: ${error.message}`);
+      setMessageText(text); // restore
     }
   };
 
-  const filteredUsers = users.filter((u: any) =>
-    u.id !== user?.uid &&
-    (u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-     u.role?.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredUsers = users.filter(
+    (u: any) =>
+      u.id !== user?.id &&
+      (u.display_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.role?.toLowerCase().includes(searchQuery.toLowerCase())),
   );
+
+  const fmtTime = (d: string | null | undefined) => {
+    if (!d) return 'Şimdi';
+    try { return format(new Date(d), 'HH:mm', { locale: tr }); }
+    catch { return 'Şimdi'; }
+  };
 
   return (
     <div className="h-[calc(100dvh-2rem)] md:h-[calc(100dvh-6rem)] animate-in fade-in duration-500 flex flex-col md:flex-row gap-6">
@@ -89,35 +121,37 @@ export default function Messages() {
             />
           </div>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-2">
           {usersLoading ? (
             <div className="p-4 text-center text-sm text-muted-foreground">Üyeler yükleniyor...</div>
-          ) : filteredUsers.map((u: any) => (
-            <div
-              key={u.id}
-              onClick={() => setSelectedUser(u)}
-              className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
-                selectedUser?.id === u.id
-                  ? 'bg-primary/20 border border-primary/30'
-                  : 'hover:bg-white/5 border border-transparent'
-              }`}
-            >
-              <div className="w-10 h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
-                {u.photoURL ? (
-                  <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover" />
-                ) : (
-                  <User className="w-5 h-5 text-muted-foreground" />
-                )}
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <div className="flex justify-between items-center">
-                  <h4 className="font-medium text-sm text-foreground truncate">{u.displayName || 'Anonim'}</h4>
-                  <span className="text-[10px] text-primary uppercase tracking-wider">{u.role}</span>
+          ) : (
+            filteredUsers.map((u: any) => (
+              <div
+                key={u.id}
+                onClick={() => setSelectedUser(u)}
+                className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+                  selectedUser?.id === u.id
+                    ? 'bg-primary/20 border border-primary/30'
+                    : 'hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                <div className="w-10 h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                  {u.photo_url ? (
+                    <img src={u.photo_url} alt={u.display_name} className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-5 h-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-medium text-sm text-foreground truncate">{u.display_name || 'Anonim'}</h4>
+                    <span className="text-[10px] text-primary uppercase tracking-wider">{u.role}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
@@ -133,14 +167,14 @@ export default function Messages() {
                 ←
               </button>
               <div className="w-10 h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center overflow-hidden">
-                {selectedUser.photoURL ? (
-                  <img src={selectedUser.photoURL} alt={selectedUser.displayName} className="w-full h-full object-cover" />
+                {selectedUser.photo_url ? (
+                  <img src={selectedUser.photo_url} alt={selectedUser.display_name} className="w-full h-full object-cover" />
                 ) : (
                   <User className="w-5 h-5 text-muted-foreground" />
                 )}
               </div>
               <div>
-                <h3 className="font-medium text-foreground">{selectedUser.displayName}</h3>
+                <h3 className="font-medium text-foreground">{selectedUser.display_name}</h3>
                 <p className="text-xs text-muted-foreground uppercase">{selectedUser.role}</p>
               </div>
             </div>
@@ -151,11 +185,11 @@ export default function Messages() {
                   <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
                     <MessageSquare className="w-8 h-8 opacity-50" />
                   </div>
-                  <p>{selectedUser.displayName} ile konuşmayı başlatın</p>
+                  <p>{selectedUser.display_name} ile konuşmayı başlatın</p>
                 </div>
               ) : (
                 messages.map((msg: any) => {
-                  const isMine = msg.senderId === user?.uid;
+                  const isMine = msg.sender_id === user?.id;
                   return (
                     <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[75%] rounded-2xl px-4 py-2 ${
@@ -165,9 +199,7 @@ export default function Messages() {
                       }`}>
                         <p className="text-sm">{msg.text}</p>
                         <span className={`text-[10px] mt-1 block ${isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                          {msg.createdAt?.toDate
-                            ? format(msg.createdAt.toDate(), 'HH:mm', { locale: tr })
-                            : 'Şimdi'}
+                          {fmtTime(msg.created_at)}
                         </span>
                       </div>
                     </div>

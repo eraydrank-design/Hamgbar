@@ -1,6 +1,5 @@
 import { useCollection } from '@/hooks/use-firestore';
 import { useAuth } from '@/lib/auth-context';
-import { orderBy } from 'firebase/firestore';
 import { useState } from 'react';
 import { Plus, Edit2, Trash2, Check, X, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,10 +7,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 export default function Rules() {
   const { userData } = useAuth();
   const isAdmin = userData?.role === 'admin';
-  
-  const { data: rules, loading, add, update, remove } = useCollection('rules', [
-    orderBy('order', 'asc')
-  ]);
+
+  const { data: rules, loading, add, update, remove } = useCollection('rules', {
+    orderBy: { column: 'order', ascending: true },
+  });
 
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -35,10 +34,10 @@ export default function Rules() {
   const handleSave = async () => {
     if (!formTitle || !formContent) return;
     if (editingId) {
-      await update(editingId, { title: formTitle, content: formContent, updatedAt: new Date() });
+      await update(editingId, { title: formTitle, content: formContent, updated_at: new Date().toISOString() });
     } else {
       const newOrder = rules.length > 0 ? Math.max(...rules.map((r: any) => r.order || 0)) + 1 : 1;
-      await add({ title: formTitle, content: formContent, order: newOrder, updatedAt: new Date() });
+      await add({ title: formTitle, content: formContent, order: newOrder, updated_at: new Date().toISOString() });
     }
     resetForm();
   };
@@ -104,9 +103,7 @@ export default function Rules() {
 
         {loading ? (
           <div className="space-y-4">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="glass p-6 rounded-xl animate-pulse h-32" />
-            ))}
+            {[1, 2, 3].map((i) => <div key={i} className="glass p-6 rounded-xl animate-pulse h-32" />)}
           </div>
         ) : rules.length === 0 ? (
           <div className="text-center py-12 glass rounded-xl border-dashed">
@@ -129,7 +126,6 @@ export default function Rules() {
                       <p className="text-muted-foreground text-sm leading-relaxed">{rule.content}</p>
                     </div>
                   </div>
-
                   {isAdmin && editingId !== rule.id && (
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button

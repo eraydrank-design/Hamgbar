@@ -29,6 +29,8 @@ VITE_FIREBASE_MEASUREMENT_ID = "G-7M4W4B9QCW"
 VITE_FIREBASE_MESSAGING_SENDER_ID = "238279325274"
 VITE_FIREBASE_PROJECT_ID = "hangbar-be018"
 VITE_FIREBASE_STORAGE_BUCKET = "hangbar-be018.firebasestorage.app"
+VITE_SUPABASE_ANON_KEY = "sb_publishable_llVrZZxnBEcmHfiAyvzrzg_YmoIdLet"
+VITE_SUPABASE_URL = "https://vtkvriukmerndjkuiduf.supabase.co"
 
 [nix]
 packages = ["csound"]

@@ -90,14 +90,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="p-4 border-t border-white/10">
           <div className="flex items-center gap-3 px-4 py-3 mb-2">
             <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 overflow-hidden">
-              {userData?.photoURL ? (
-                <img src={userData.photoURL as string} alt={userData.displayName as string} className="w-full h-full object-cover" />
+              {userData?.photo_url ? (
+                <img src={userData.photo_url as string} alt={userData.display_name as string} className="w-full h-full object-cover" />
               ) : (
                 <User className="w-5 h-5 text-primary" />
               )}
             </div>
             <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-medium truncate">{userData?.displayName as string}</p>
+              <p className="text-sm font-medium truncate">{userData?.display_name as string}</p>
               <p className="text-xs text-muted-foreground capitalize">{userData?.role as string}</p>
             </div>
           </div>
