@@ -23,54 +23,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userData, setUserData] = useState<Record<string, any> | null>(null);
   const [loading, setLoading]   = useState(true);
 
-  const profileChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const initializingRef   = useRef(false); // prevent double-init on rapid auth events
+  const profileChannelRef  = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  // Track the last session ID we processed so rapid duplicate events don't double-fire.
+  // We intentionally do NOT block on this — we let every distinct session through.
+  const lastSessionIdRef   = useRef<string | null>(undefined as any);
 
   // ── Fetch profile row ──────────────────────────────────────────────────────
-  const fetchProfile = async (uid: string) => {
+  const fetchProfile = async (uid: string): Promise<Record<string, any> | null> => {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', uid)
-      .single();
-    if (!error && data) setUserData(data);
+      .maybeSingle();           // returns null (not error) when 0 rows
+
+    if (error) {
+      console.error('[auth] fetchProfile error — table may not exist or RLS blocked:', error);
+      return null;
+    }
+    if (data) {
+      setUserData(data);
+      return data;
+    }
+    // Row not found yet (insert may not be visible yet) — not an error
+    console.warn('[auth] fetchProfile: no row returned for uid', uid);
+    return null;
   };
 
-  // ── Upsert profile on sign-in ──────────────────────────────────────────────
-  const ensureProfile = async (u: User) => {
+  // ── Create or sync profile on sign-in ─────────────────────────────────────
+  const ensureProfile = async (u: User): Promise<void> => {
     const role = ADMIN_EMAILS.includes((u.email ?? '').toLowerCase()) ? 'admin' : 'staff';
 
-    const { data: existing, error: fetchErr } = await supabase
+    // maybeSingle() returns (data: null, error: null) when 0 rows — no PGRST116 check needed.
+    const { data: existing, error: selectErr } = await supabase
       .from('profiles')
       .select('id')
       .eq('id', u.id)
-      .single();
+      .maybeSingle();
 
-    if (!existing && fetchErr?.code === 'PGRST116') {
-      // Profile does not exist — create it
+    if (selectErr) {
+      console.error('[auth] ensureProfile — SELECT failed (profiles table missing or RLS issue):', selectErr);
+      // Try insert anyway — if the table is missing this will also fail, but we'll surface the error.
+    }
+
+    if (!existing) {
+      // No profile row — create it.
       const { error: insertErr } = await supabase.from('profiles').insert({
-        id:            u.id,
-        email:         u.email ?? null,
+        id:             u.id,
+        email:          u.email ?? null,
         display_name:
           u.user_metadata?.full_name ||
           u.user_metadata?.name ||
           u.email?.split('@')[0] ||
           'Misafir',
-        photo_url:     u.user_metadata?.avatar_url ?? '',
-        username:      '',
+        photo_url:      u.user_metadata?.avatar_url ?? '',
+        username:       '',
         role,
         cocktail_count: 0,
-        badges:        [],
-        favorites:     [],
+        badges:         [],
+        favorites:      [],
       });
-      if (insertErr) console.error('[auth] profile insert:', insertErr.message);
-    } else if (existing) {
-      // Profile exists — sync immutable fields only
+      if (insertErr) {
+        console.error('[auth] ensureProfile — INSERT failed:', insertErr);
+      } else {
+        console.log('[auth] profile created for', u.email);
+      }
+    } else {
+      // Profile exists — keep email and role in sync.
       const { error: updateErr } = await supabase
         .from('profiles')
         .update({ email: u.email ?? null, role })
         .eq('id', u.id);
-      if (updateErr) console.error('[auth] profile update:', updateErr.message);
+      if (updateErr) {
+        console.error('[auth] ensureProfile — UPDATE failed:', updateErr);
+      }
     }
   };
 
@@ -82,41 +107,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${uid}` },
-        (payload) => setUserData(payload.new as Record<string, any>),
+        (payload) => {
+          console.log('[auth] realtime profile update received');
+          setUserData(payload.new as Record<string, any>);
+        },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') console.log('[auth] profile channel subscribed');
+        if (status === 'CHANNEL_ERROR') console.error('[auth] profile channel error');
+      });
     profileChannelRef.current = ch;
   };
 
-  // ── Core init handler (called once per auth event) ─────────────────────────
-  const handleAuthChange = async (_event: AuthChangeEvent, session: Session | null) => {
-    if (initializingRef.current) return;
-    initializingRef.current = true;
+  // ── Core auth-change handler ───────────────────────────────────────────────
+  // Called by onAuthStateChange for every event. We deduplicate by session id
+  // so rapid duplicate SIGNED_IN/INITIAL_SESSION pairs (React StrictMode, etc.)
+  // don't fire two simultaneous DB round-trips.
+  const handleAuthChange = async (event: AuthChangeEvent, session: Session | null) => {
+    const sessionId = session?.access_token ?? null;
 
-    try {
-      const u = session?.user ?? null;
-      setUser(u);
+    console.log(`[auth] event=${event} sessionId=${sessionId ? sessionId.slice(0, 16) + '…' : 'null'}`);
 
-      if (u) {
-        await ensureProfile(u);
-        await fetchProfile(u.id);
-        subscribeToProfile(u.id);
-      } else {
-        setUserData(null);
-        if (profileChannelRef.current) {
-          supabase.removeChannel(profileChannelRef.current);
-          profileChannelRef.current = null;
-        }
-      }
-    } finally {
-      setLoading(false);
-      initializingRef.current = false;
+    // Deduplicate: skip if this exact session was already fully processed.
+    // We still allow null→null (INITIAL_SESSION with no user) through once.
+    if (sessionId !== null && sessionId === lastSessionIdRef.current) {
+      console.log('[auth] duplicate session — skipping');
+      return;
     }
+    lastSessionIdRef.current = sessionId;
+
+    const u = session?.user ?? null;
+    setUser(u);
+
+    if (u) {
+      try {
+        await ensureProfile(u);
+        const profile = await fetchProfile(u.id);
+        if (!profile) {
+          // Profile fetch failed (table missing?). We still set loading=false and
+          // let the redirect happen — pages handle missing userData gracefully.
+          console.error('[auth] userData is null after fetchProfile — check if SQL migration has been run');
+        }
+        subscribeToProfile(u.id);
+      } catch (err) {
+        console.error('[auth] unexpected error during profile init:', err);
+      }
+    } else {
+      setUserData(null);
+      if (profileChannelRef.current) {
+        supabase.removeChannel(profileChannelRef.current);
+        profileChannelRef.current = null;
+      }
+    }
+
+    // Always clear loading, even on failure — never leave the UI in a spinner forever.
+    setLoading(false);
+    console.log(`[auth] loading cleared. user=${u?.email ?? 'none'}`);
   };
 
   useEffect(() => {
-    // `onAuthStateChange` fires INITIAL_SESSION immediately on subscribe —
-    // this replaces a separate getSession() call and avoids double-init.
+    // onAuthStateChange fires INITIAL_SESSION synchronously on subscribe.
+    // This is our single source of truth — no separate getSession() call needed.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(handleAuthChange);
 
     return () => {
@@ -126,6 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const signOut = async () => {
+    console.log('[auth] signing out');
     await supabase.auth.signOut();
     setUser(null);
     setUserData(null);

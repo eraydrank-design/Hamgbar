@@ -10,29 +10,34 @@ export default function Login() {
   const { user, userData, loading } = useAuth();
 
   const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail]           = useState('');
+  const [password, setPassword]     = useState('');
+  const [error, setError]           = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
+  const [emailSent, setEmailSent]   = useState(false);
 
-  // Redirect once auth + userData are both ready.
+  // ── Redirect as soon as auth is settled and user is authenticated ──────────
+  // Do NOT gate on userData — fetchProfile may fail if the migration hasn't run yet,
+  // and we must not trap the user on the login page forever.
+  // Use optional chaining so an admin still lands on /admin once userData arrives.
   useEffect(() => {
-    if (!loading && user && userData) {
-      const dest = userData.role === 'admin' ? '/admin' : '/dashboard';
-      setLocation(dest);
-    }
-  }, [loading, user, userData]);
+    if (loading) return;
+    if (!user)   return;
+
+    const dest = userData?.role === 'admin' ? '/admin' : '/dashboard';
+    console.log('[login] redirecting to', dest, '(role:', userData?.role ?? 'unknown', ')');
+    setLocation(dest);
+  }, [loading, user, userData]); // keep userData in deps so admin gets /admin once role loads
 
   const translateError = (msg: string): string => {
-    if (msg.includes('Invalid login credentials')) return 'E-posta veya şifre hatalı.';
-    if (msg.includes('Email not confirmed')) return 'E-posta adresinizi onaylamanız gerekiyor. Gelen kutunuzu kontrol edin.';
-    if (msg.includes('User already registered')) return 'Bu e-posta adresi zaten kullanımda.';
-    if (msg.includes('Password should be at least')) return 'Şifre en az 6 karakter olmalıdır.';
-    if (msg.includes('Unable to validate email address')) return 'Geçersiz e-posta adresi.';
-    if (msg.includes('signup is disabled')) return 'Kayıt şu an devre dışı.';
-    if (msg.includes('rate limit')) return 'Çok fazla deneme. Lütfen bir süre bekleyin.';
-    return 'Bir hata oluştu. Lütfen tekrar deneyin.';
+    if (msg.includes('Invalid login credentials'))       return 'E-posta veya şifre hatalı.';
+    if (msg.includes('Email not confirmed'))             return 'E-posta adresinizi onaylamanız gerekiyor. Gelen kutunuzu kontrol edin.';
+    if (msg.includes('User already registered'))         return 'Bu e-posta adresi zaten kullanımda.';
+    if (msg.includes('Password should be at least'))     return 'Şifre en az 6 karakter olmalıdır.';
+    if (msg.includes('Unable to validate email address'))return 'Geçersiz e-posta adresi.';
+    if (msg.includes('signup is disabled'))              return 'Kayıt şu an devre dışı.';
+    if (msg.includes('rate limit'))                      return 'Çok fazla deneme. Lütfen bir süre bekleyin.';
+    return `Bir hata oluştu: ${msg}`;
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
@@ -40,23 +45,38 @@ export default function Login() {
     setError('');
     setEmailSent(false);
     setIsSubmitting(true);
+
     try {
       if (isRegister) {
+        console.log('[login] attempting signUp for', email);
         const { data, error: err } = await supabase.auth.signUp({ email, password });
         if (err) throw err;
-        // If session is null, Supabase requires email confirmation
+        console.log('[login] signUp result — session:', data.session ? 'present' : 'null (email confirmation required)');
+        // No session → Supabase requires email confirmation before logging in
         if (!data.session) {
           setEmailSent(true);
           return;
         }
-        // Otherwise, onAuthStateChange will handle redirect via useEffect
+        // Session present → onAuthStateChange fires SIGNED_IN → handleAuthChange → redirect
       } else {
-        const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-        if (err) throw err;
-        // onAuthStateChange will trigger; redirect happens via useEffect
+        console.log('[login] attempting signInWithPassword for', email);
+        const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
+        if (err) {
+          console.error('[login] signInWithPassword error:', err);
+          throw err;
+        }
+        // Guard: never show success state without a real session
+        if (!data.session) {
+          console.error('[login] signInWithPassword returned no session and no error — unexpected state');
+          throw new Error('Oturum oluşturulamadı. Lütfen tekrar deneyin.');
+        }
+        console.log('[login] signInWithPassword succeeded. Session user:', data.session.user.email);
+        // onAuthStateChange will fire SIGNED_IN → handleAuthChange → redirect via useEffect above
       }
     } catch (err: any) {
-      setError(translateError(err.message ?? String(err)));
+      const raw = err.message ?? String(err);
+      console.error('[login] auth error (raw):', raw);
+      setError(translateError(raw));
     } finally {
       setIsSubmitting(false);
     }
