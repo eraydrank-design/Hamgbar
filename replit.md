@@ -1,44 +1,71 @@
-# [Project name]
+# HangBar — Hangover Members App
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A members-only bar community app (Turkish UI) for staff to share cocktail posts, send messages, view announcements, manage tasks, and maintain social profiles.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/hangbar run dev` — run the frontend (Vite, port auto-assigned)
+- `pnpm --filter @workspace/api-server run dev` — run the API server
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+
+## Required Secrets
+
+- `VITE_SUPABASE_URL` — Supabase project URL
+- `VITE_SUPABASE_ANON_KEY` — Supabase anon/public key
+
+## Database Migrations
+
+Supabase is the primary database. Migrations live in `artifacts/hangbar/supabase/migrations/`.
+Run them in order via **Supabase Dashboard → SQL Editor → New query → Run**:
+
+1. `001_initial.sql` — Core tables (profiles, posts, messages, cocktails, etc.)
+2. `002_social.sql` — Social profile tables (follows, post_likes) + profile columns (cover_url, points, pinned_post_id)
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- **Frontend**: React + Vite + Tailwind CSS + shadcn/ui + Framer Motion
+- **Auth + DB**: Supabase (PostgreSQL, Storage, Realtime)
+- **Routing**: wouter
+- **State**: React context (auth), useCollection/useDocument hooks (Supabase-backed)
+- **API Server**: Express 5 + Drizzle ORM (separate artifact, not yet wired to frontend)
+- **Monorepo**: pnpm workspaces, Node.js 24, TypeScript 5.9
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/hangbar/src/pages/` — all page components
+- `artifacts/hangbar/src/components/layout/` — AppShell (nav + sidebar), ProtectedRoute
+- `artifacts/hangbar/src/components/profile/UserAvatar.tsx` — clickable avatar component (use everywhere)
+- `artifacts/hangbar/src/lib/auth-context.tsx` — auth state, profile sync
+- `artifacts/hangbar/src/lib/supabase.ts` — Supabase client
+- `artifacts/hangbar/src/hooks/use-firestore.ts` — useCollection / useDocument (Supabase-backed)
+- `artifacts/hangbar/supabase/migrations/` — SQL migration files
+- `artifacts/api-server/` — Express backend (unused by frontend currently)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **Supabase-only frontend**: All data access goes through Supabase client directly; the Express API server exists but is not wired to the React app yet.
+- **Admin emails hardcoded**: `ADMIN_EMAILS` in `auth-context.tsx` determines admin role on sign-in. Change this list to add admins.
+- **UserAvatar component**: All avatar/username displays that should link to a profile must use `<UserAvatar userId={...} />` — this is the single source of truth for profile navigation.
+- **Profile routing**: `/profile` = own profile, `/profile/:userId` = any user's public profile — both render the same `Profile` component which detects `isOwnProfile` from auth state.
+- **Social tables**: `follows` and `post_likes` live in Supabase; counts are computed at query time (not denormalized) except `cocktail_count` and `points` which are columns on `profiles`.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
-
-## User preferences
-
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Members-only bar community (Turkish UI)
+- Social feed (posts with images, cocktail tags, likes)
+- Full social profiles with cover photo, bio, stats, follow/following, post pins
+- Profile tabs: Posts · Cocktails · Likes
+- Real-time private messaging between members
+- Cocktail menu and submission workflow
+- Announcements, table requests, staff tasks, admin panel
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Run `002_social.sql` in Supabase before using follow/like/cover photo features — without it those columns and tables don't exist and queries will fail silently.
+- `useCollection` and `useDocument` hooks set up Supabase Realtime channels — each usage adds a subscription, so avoid calling them inside loops.
+- Vite requires `--host 0.0.0.0` for Replit preview to work (already set in `package.json`).
+- `SESSION_SECRET` env var exists but is used by the API server, not the frontend.
 
 ## Pointers
 

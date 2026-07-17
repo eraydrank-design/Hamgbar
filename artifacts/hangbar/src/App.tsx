@@ -62,7 +62,15 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
+      {/* Own profile */}
       <Route path="/profile">
+        <ProtectedRoute>
+          <ProtectedLayout><Profile /></ProtectedLayout>
+        </ProtectedRoute>
+      </Route>
+
+      {/* Any user's profile */}
+      <Route path="/profile/:userId">
         <ProtectedRoute>
           <ProtectedLayout><Profile /></ProtectedLayout>
         </ProtectedRoute>

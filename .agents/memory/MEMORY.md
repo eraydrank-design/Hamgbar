@@ -1,0 +1,2 @@
+- [Social profile migration](social-profile-migration.md) — Supabase migration 002_social.sql must be run manually; app silently fails without it.
+- [Profile routing pattern](profile-routing.md) — /profile = own, /profile/:userId = any user; same component detects isOwnProfile from auth.

@@ -2,10 +2,11 @@ import { useAuth } from '@/lib/auth-context';
 import { useCollection } from '@/hooks/use-firestore';
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Send, User, Search, MessageSquare } from 'lucide-react';
+import { Send, Search, MessageSquare } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { UserAvatar } from '@/components/profile/UserAvatar';
 
 export default function Messages() {
   const { userData, user } = useAuth();
@@ -42,7 +43,6 @@ export default function Messages() {
 
     fetchMessages();
 
-    // Real-time: listen for new messages in either direction
     if (channelRef.current) supabase.removeChannel(channelRef.current);
     const ch = supabase
       .channel(`messages-${user.id}-${selectedUser.id}`)
@@ -87,7 +87,7 @@ export default function Messages() {
 
     if (error) {
       toast.error(`Mesaj gönderilemedi: ${error.message}`);
-      setMessageText(text); // restore
+      setMessageText(text);
     }
   };
 
@@ -129,26 +129,29 @@ export default function Messages() {
             filteredUsers.map((u: any) => (
               <div
                 key={u.id}
-                onClick={() => setSelectedUser(u)}
-                className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+                className={`flex items-center gap-3 p-3 rounded-xl transition-colors border ${
                   selectedUser?.id === u.id
-                    ? 'bg-primary/20 border border-primary/30'
-                    : 'hover:bg-white/5 border border-transparent'
+                    ? 'bg-primary/20 border-primary/30'
+                    : 'hover:bg-white/5 border-transparent'
                 }`}
               >
-                <div className="w-10 h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
-                  {u.photo_url ? (
-                    <img src={u.photo_url} alt={u.display_name} className="w-full h-full object-cover" />
-                  ) : (
-                    <User className="w-5 h-5 text-muted-foreground" />
-                  )}
-                </div>
-                <div className="flex-1 overflow-hidden">
+                {/* Avatar → navigates to profile */}
+                <UserAvatar
+                  userId={u.id}
+                  photoUrl={u.photo_url}
+                  displayName={u.display_name}
+                  size="md"
+                />
+                {/* Name area → opens conversation */}
+                <button
+                  className="flex-1 overflow-hidden text-left"
+                  onClick={() => setSelectedUser(u)}
+                >
                   <div className="flex justify-between items-center">
                     <h4 className="font-medium text-sm text-foreground truncate">{u.display_name || 'Anonim'}</h4>
-                    <span className="text-[10px] text-primary uppercase tracking-wider">{u.role}</span>
+                    <span className="text-[10px] text-primary uppercase tracking-wider ml-2">{u.role}</span>
                   </div>
-                </div>
+                </button>
               </div>
             ))
           )}
@@ -166,14 +169,14 @@ export default function Messages() {
               >
                 ←
               </button>
-              <div className="w-10 h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center overflow-hidden">
-                {selectedUser.photo_url ? (
-                  <img src={selectedUser.photo_url} alt={selectedUser.display_name} className="w-full h-full object-cover" />
-                ) : (
-                  <User className="w-5 h-5 text-muted-foreground" />
-                )}
-              </div>
-              <div>
+              {/* Clickable avatar in chat header */}
+              <UserAvatar
+                userId={selectedUser.id}
+                photoUrl={selectedUser.photo_url}
+                displayName={selectedUser.display_name}
+                size="md"
+              />
+              <div className="flex-1">
                 <h3 className="font-medium text-foreground">{selectedUser.display_name}</h3>
                 <p className="text-xs text-muted-foreground uppercase">{selectedUser.role}</p>
               </div>

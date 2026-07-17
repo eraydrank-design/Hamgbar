@@ -1,18 +1,21 @@
 import { useAuth } from '@/lib/auth-context';
 import { useCollection } from '@/hooks/use-firestore';
 import { useState, useRef } from 'react';
-import { Search, Martini, Bell, Calendar, Plus, X, Camera, Loader2, User } from 'lucide-react';
+import { Search, Martini, Bell, Calendar, Plus, X, Camera, Loader2, Heart } from 'lucide-react';
 import { Link } from 'wouter';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { UserAvatar } from '@/components/profile/UserAvatar';
+import { useLocation } from 'wouter';
 
 type FilterType = 'Tümü' | 'Gönderiler' | 'Kokteyller' | 'Etkinlikler';
 
 export default function Explore() {
   const { user, userData } = useAuth();
+  const [, navigate] = useLocation();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterType>('Tümü');
   const [modalOpen, setModalOpen] = useState(false);
@@ -203,12 +206,20 @@ export default function Explore() {
                   )}
                   <div className="p-4 flex flex-col flex-1">
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="w-7 h-7 rounded-full bg-primary/20 overflow-hidden flex-shrink-0">
-                        {item.author_photo
-                          ? <img src={item.author_photo} alt="" className="w-full h-full object-cover" />
-                          : <User className="w-3.5 h-3.5 m-1.5 text-primary" />}
-                      </div>
-                      <span className="text-xs font-medium text-foreground">{item.author_name}</span>
+                      {/* Clickable author avatar */}
+                      <UserAvatar
+                        userId={item.author_id}
+                        photoUrl={item.author_photo}
+                        displayName={item.author_name}
+                        size="xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => item.author_id && navigate(`/profile/${item.author_id}`)}
+                        className="text-xs font-medium text-foreground hover:text-primary transition-colors"
+                      >
+                        {item.author_name}
+                      </button>
                       <span className="text-xs text-muted-foreground ml-auto">
                         {fmtDate(item.created_at, 'd MMM') ?? 'Yeni'}
                       </span>
@@ -219,6 +230,10 @@ export default function Explore() {
                       </div>
                     )}
                     <p className="text-sm text-foreground line-clamp-3 flex-1">{item.caption}</p>
+                    <div className="mt-3 pt-3 border-t border-white/5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Heart className="w-3.5 h-3.5" />
+                      <span>Beğen</span>
+                    </div>
                   </div>
                 </div>
               );
