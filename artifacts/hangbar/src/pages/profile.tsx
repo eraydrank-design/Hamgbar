@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { Link } from 'wouter';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,13 +56,13 @@ async function uploadImage(userId: string, file: File, folder: string): Promise<
   if (file.size > 8 * 1024 * 1024) throw new Error('Dosya boyutu 8 MB\'ı geçemez.');
   const ext = file.name.split('.').pop();
   const path = `${folder}/${userId}/${Date.now()}.${ext}`;
-  const { error } = await supabase.storage.from('images').upload(path, file, { upsert: true });
-  if (error) throw error;
+  const { error: uploadError } = await supabase.storage.from('images').upload(path, file, { upsert: true });
+  if (uploadError) throw uploadError;
   const { data } = supabase.storage.from('images').getPublicUrl(path);
   return data.publicUrl;
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── StatPill ─────────────────────────────────────────────────────────────────
 
 function StatPill({ value, label, onClick }: { value: number | string; label: string; onClick?: () => void }) {
   return (
@@ -77,15 +76,9 @@ function StatPill({ value, label, onClick }: { value: number | string; label: st
   );
 }
 
-function FollowListModal({
-  title,
-  userIds,
-  onClose,
-}: {
-  title: string;
-  userIds: string[];
-  onClose: () => void;
-}) {
+// ─── FollowListModal ──────────────────────────────────────────────────────────
+
+function FollowListModal({ title, userIds, onClose }: { title: string; userIds: string[]; onClose: () => void }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [, navigate] = useLocation();
@@ -94,7 +87,7 @@ function FollowListModal({
     if (!userIds.length) { setLoading(false); return; }
     supabase.from('profiles').select('*').in('id', userIds)
       .then(({ data }) => { setProfiles((data as Profile[]) ?? []); setLoading(false); });
-  }, [userIds.join(',')]);
+  }, [userIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <motion.div
@@ -126,9 +119,7 @@ function FollowListModal({
               className="flex items-center gap-3 p-3 w-full rounded-xl hover:bg-white/5 transition-colors text-left"
             >
               <div className="w-11 h-11 rounded-full bg-black border border-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                {p.photo_url
-                  ? <img src={p.photo_url} alt={p.display_name} className="w-full h-full object-cover" />
-                  : <User className="w-5 h-5 text-muted-foreground" />}
+                {p.photo_url ? <img src={p.photo_url} alt={p.display_name} className="w-full h-full object-cover" /> : <User className="w-5 h-5 text-muted-foreground" />}
               </div>
               <div className="flex-1 overflow-hidden">
                 <p className="text-sm font-medium text-foreground truncate">{p.display_name}</p>
@@ -143,15 +134,9 @@ function FollowListModal({
   );
 }
 
-function EditProfileModal({
-  profile,
-  onClose,
-  onSaved,
-}: {
-  profile: Profile;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
+// ─── EditProfileModal ─────────────────────────────────────────────────────────
+
+function EditProfileModal({ profile, onClose, onSaved }: { profile: Profile; onClose: () => void; onSaved: () => void }) {
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [username, setUsername] = useState(profile.username ?? '');
   const [bio, setBio] = useState(profile.bio ?? '');
@@ -167,11 +152,16 @@ function EditProfileModal({
     setIsUploadingAvatar(true);
     try {
       const url = await uploadImage(profile.id, file, 'profile-photos');
-      await supabase.from('profiles').update({ photo_url: url }).eq('id', profile.id);
+      const { error } = await supabase.from('profiles').update({ photo_url: url }).eq('id', profile.id);
+      if (error) throw error;
       toast.success('Profil fotoğrafı güncellendi.');
       onSaved();
-    } catch (err: any) { toast.error(err?.message ?? 'Fotoğraf yüklenemedi.'); }
-    finally { setIsUploadingAvatar(false); if (avatarRef.current) avatarRef.current.value = ''; }
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Fotoğraf yüklenemedi.');
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarRef.current) avatarRef.current.value = '';
+    }
   };
 
   const handleCoverChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -180,11 +170,16 @@ function EditProfileModal({
     setIsUploadingCover(true);
     try {
       const url = await uploadImage(profile.id, file, 'cover-photos');
-      await supabase.from('profiles').update({ cover_url: url }).eq('id', profile.id);
+      const { error } = await supabase.from('profiles').update({ cover_url: url }).eq('id', profile.id);
+      if (error) throw error;
       toast.success('Kapak fotoğrafı güncellendi.');
       onSaved();
-    } catch (err: any) { toast.error(err?.message ?? 'Fotoğraf yüklenemedi.'); }
-    finally { setIsUploadingCover(false); if (coverRef.current) coverRef.current.value = ''; }
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Fotoğraf yüklenemedi.');
+    } finally {
+      setIsUploadingCover(false);
+      if (coverRef.current) coverRef.current.value = '';
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -192,16 +187,20 @@ function EditProfileModal({
     if (!displayName.trim()) { toast.error('Görünen ad boş bırakılamaz.'); return; }
     setIsSaving(true);
     try {
-      await supabase.from('profiles').update({
+      const { error } = await supabase.from('profiles').update({
         display_name: displayName.trim(),
         username: username.trim().toLowerCase().replace(/\s/g, ''),
         bio: bio.trim(),
       }).eq('id', profile.id);
+      if (error) throw error;
       toast.success('Profil kaydedildi.');
       onSaved();
       onClose();
-    } catch (err: any) { toast.error(err?.message ?? 'Kaydedilemedi.'); }
-    finally { setIsSaving(false); }
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Kaydedilemedi.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -236,7 +235,7 @@ function EditProfileModal({
               >
                 {profile.photo_url
                   ? <img src={profile.photo_url} alt="" className="w-full h-full object-cover" />
-                  : <User className="w-8 h-8 text-muted-foreground m-auto mt-5" />}
+                  : <User className="w-8 h-8 text-muted-foreground absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />}
                 <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   {isUploadingAvatar ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : <Camera className="w-5 h-5 text-white" />}
                 </div>
@@ -304,11 +303,7 @@ function EditProfileModal({
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2.5 rounded-xl text-muted-foreground hover:bg-white/5 transition-colors"
-              >
+              <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-xl text-muted-foreground hover:bg-white/5 transition-colors">
                 İptal
               </button>
               <button
@@ -326,26 +321,14 @@ function EditProfileModal({
   );
 }
 
-// ─── Post Card ────────────────────────────────────────────────────────────────
+// ─── PostCard ─────────────────────────────────────────────────────────────────
 
 function PostCard({
-  post,
-  isPinned,
-  isOwnProfile,
-  onPin,
-  onUnpin,
-  likeCount,
-  likedByMe,
-  onLike,
+  post, isPinned, isOwnProfile, onPin, onUnpin, likeCount, likedByMe, onLike,
 }: {
-  post: any;
-  isPinned: boolean;
-  isOwnProfile: boolean;
-  onPin: (id: string) => void;
-  onUnpin: (id: string) => void;
-  likeCount: number;
-  likedByMe: boolean;
-  onLike: (postId: string, liked: boolean) => void;
+  post: any; isPinned: boolean; isOwnProfile: boolean;
+  onPin: (id: string) => void; onUnpin: () => void;
+  likeCount: number; likedByMe: boolean; onLike: (id: string, liked: boolean) => void;
 }) {
   return (
     <motion.div
@@ -377,7 +360,7 @@ function PostCard({
           <div className="flex items-center gap-3">
             {isOwnProfile && (
               <button
-                onClick={() => isPinned ? onUnpin(post.id) : onPin(post.id)}
+                onClick={() => isPinned ? onUnpin() : onPin(post.id)}
                 className={`p-1.5 rounded-lg transition-colors ${isPinned ? 'text-primary hover:bg-primary/10' : 'text-muted-foreground hover:text-primary hover:bg-white/10'}`}
                 title={isPinned ? 'Sabitlemeyi kaldır' : 'Sabitle'}
               >
@@ -398,10 +381,19 @@ function PostCard({
   );
 }
 
+function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
+  return (
+    <div className="text-center py-16 glass rounded-2xl border border-dashed border-white/10">
+      <Icon className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-30" />
+      <p className="text-muted-foreground text-sm">{message}</p>
+    </div>
+  );
+}
+
 // ─── Main Profile Page ────────────────────────────────────────────────────────
 
 export default function Profile() {
-  const { user, userData: myData } = useAuth();
+  const { user } = useAuth();
   const params = useParams<{ userId?: string }>();
   const [, navigate] = useLocation();
   const goBack = () => window.history.back();
@@ -423,7 +415,7 @@ export default function Profile() {
   const [likedPosts, setLikedPosts] = useState<any[]>([]);
   const [tabLoading, setTabLoading] = useState(false);
 
-  // Likes state
+  // Likes state (for posts tab)
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
   const [myLikes, setMyLikes] = useState<Set<string>>(new Set());
 
@@ -434,15 +426,16 @@ export default function Profile() {
   const [followerIds, setFollowerIds] = useState<string[]>([]);
   const [followingIds, setFollowingIds] = useState<string[]>([]);
 
-  // ── Fetch profile ───────────────────────────────────────────────────────────
+  // ── Fetch profile ────────────────────────────────────────────────────────────
   const fetchProfile = useCallback(async () => {
     if (!profileId) return;
-    const { data } = await supabase.from('profiles').select('*').eq('id', profileId).single();
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', profileId).single();
+    if (error) { console.error('[profile] fetchProfile error:', error); return; }
     if (data) setProfile(data as Profile);
     setLoading(false);
   }, [profileId]);
 
-  // ── Fetch stats ─────────────────────────────────────────────────────────────
+  // ── Fetch stats ──────────────────────────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     if (!profileId) return;
 
@@ -450,47 +443,44 @@ export default function Profile() {
       { count: postCount },
       { count: followerCount },
       { count: followingCount },
-      { data: userPosts },
+      { data: userPostsData },
+      { data: profileData },
     ] = await Promise.all([
       supabase.from('posts').select('*', { count: 'exact', head: true }).eq('author_id', profileId),
       supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profileId),
       supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', profileId),
       supabase.from('posts').select('id').eq('author_id', profileId),
+      supabase.from('profiles').select('points, cocktail_count').eq('id', profileId).single(),
     ]);
 
-    const postIds = (userPosts ?? []).map((p: any) => p.id);
+    const postIds = (userPostsData ?? []).map((p: any) => p.id);
     let likeCount = 0;
     if (postIds.length > 0) {
       const { count } = await supabase.from('post_likes').select('*', { count: 'exact', head: true }).in('post_id', postIds);
       likeCount = count ?? 0;
     }
 
-    // Rank: how many users have more points + 1
-    const { data: profileData } = await supabase.from('profiles').select('points').eq('id', profileId).single();
     const userPoints = (profileData as any)?.points ?? 0;
     const { count: higherCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gt('points', userPoints);
-    const rank = (higherCount ?? 0) + 1;
-
-    const { data: cocktailData } = await supabase.from('profiles').select('cocktail_count').eq('id', profileId).single();
 
     setStats({
       postCount: postCount ?? 0,
-      cocktailCount: (cocktailData as any)?.cocktail_count ?? 0,
+      cocktailCount: (profileData as any)?.cocktail_count ?? 0,
       likeCount,
       followerCount: followerCount ?? 0,
       followingCount: followingCount ?? 0,
-      rank,
+      rank: (higherCount ?? 0) + 1,
     });
   }, [profileId]);
 
-  // ── Fetch follow status ─────────────────────────────────────────────────────
+  // ── Fetch follow status ──────────────────────────────────────────────────────
   const fetchFollowStatus = useCallback(async () => {
     if (!user || !profileId || isOwnProfile) return;
     const { data } = await supabase.from('follows').select('id').eq('follower_id', user.id).eq('following_id', profileId).maybeSingle();
     setIsFollowing(!!data);
-  }, [user?.id, profileId, isOwnProfile]);
+  }, [user?.id, profileId, isOwnProfile]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fetch followers/following IDs ───────────────────────────────────────────
+  // ── Fetch follow lists ───────────────────────────────────────────────────────
   const fetchFollowLists = useCallback(async () => {
     if (!profileId) return;
     const [{ data: fwrs }, { data: fwing }] = await Promise.all([
@@ -501,19 +491,19 @@ export default function Profile() {
     setFollowingIds((fwing ?? []).map((r: any) => r.following_id));
   }, [profileId]);
 
-  // ── Fetch tab content ───────────────────────────────────────────────────────
+  // ── Fetch tab content ────────────────────────────────────────────────────────
   const fetchTabContent = useCallback(async () => {
     if (!profileId) return;
     setTabLoading(true);
     try {
       if (activeTab === 'posts') {
-        const { data } = await supabase.from('posts').select('*').eq('author_id', profileId).order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('posts').select('*').eq('author_id', profileId).order('created_at', { ascending: false });
+        if (error) throw error;
         const postsData = (data ?? []) as any[];
         setPosts(postsData);
 
-        // Fetch like counts and my likes
-        const postIds = postsData.map((p) => p.id);
-        if (postIds.length > 0) {
+        if (postsData.length > 0) {
+          const postIds = postsData.map((p) => p.id);
           const { data: likesData } = await supabase.from('post_likes').select('post_id, user_id').in('post_id', postIds);
           const counts: Record<string, number> = {};
           const mySet = new Set<string>();
@@ -523,13 +513,18 @@ export default function Profile() {
           }
           setLikeCounts(counts);
           setMyLikes(mySet);
+        } else {
+          setLikeCounts({});
+          setMyLikes(new Set());
         }
       } else if (activeTab === 'cocktails') {
-        const { data } = await supabase.from('cocktail_submissions').select('*').eq('submitted_by', profileId).order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('cocktail_submissions').select('*').eq('submitted_by', profileId).order('created_at', { ascending: false });
+        if (error) throw error;
         setCocktails((data ?? []) as any[]);
       } else if (activeTab === 'likes') {
-        if (!user) return;
-        const { data: likeRows } = await supabase.from('post_likes').select('post_id').eq('user_id', isOwnProfile ? user.id : profileId);
+        const targetUserId = isOwnProfile ? user?.id : profileId;
+        if (!targetUserId) return;
+        const { data: likeRows } = await supabase.from('post_likes').select('post_id').eq('user_id', targetUserId);
         const likedIds = (likeRows ?? []).map((r: any) => r.post_id);
         if (likedIds.length > 0) {
           const { data: likedPostsData } = await supabase.from('posts').select('*').in('id', likedIds).order('created_at', { ascending: false });
@@ -538,36 +533,41 @@ export default function Profile() {
           setLikedPosts([]);
         }
       }
+    } catch (err) {
+      console.error('[profile] fetchTabContent error:', err);
     } finally {
       setTabLoading(false);
     }
   }, [profileId, activeTab, user?.id, isOwnProfile]);
 
-  // ── Initial load ────────────────────────────────────────────────────────────
+  // ── Initial load ─────────────────────────────────────────────────────────────
   useEffect(() => {
     setLoading(true);
+    setProfile(null);
     fetchProfile();
     fetchStats();
     fetchFollowStatus();
     fetchFollowLists();
-  }, [profileId]);
+  }, [profileId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchTabContent();
-  }, [activeTab, profileId]);
+  }, [activeTab, profileId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Follow / Unfollow ───────────────────────────────────────────────────────
+  // ── Follow / Unfollow ────────────────────────────────────────────────────────
   const handleFollow = async () => {
     if (!user || !profileId || followLoading) return;
     setFollowLoading(true);
     try {
       if (isFollowing) {
-        await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', profileId);
+        const { error } = await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', profileId);
+        if (error) throw error;
         setIsFollowing(false);
         setStats((s) => ({ ...s, followerCount: Math.max(0, s.followerCount - 1) }));
         setFollowerIds((ids) => ids.filter((id) => id !== user.id));
       } else {
-        await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId });
+        const { error } = await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId });
+        if (error) throw error;
         setIsFollowing(true);
         setStats((s) => ({ ...s, followerCount: s.followerCount + 1 }));
         setFollowerIds((ids) => [...ids, user.id]);
@@ -579,16 +579,18 @@ export default function Profile() {
     }
   };
 
-  // ── Like / Unlike ───────────────────────────────────────────────────────────
+  // ── Like / Unlike ────────────────────────────────────────────────────────────
   const handleLike = async (postId: string, alreadyLiked: boolean) => {
     if (!user) return;
     try {
       if (alreadyLiked) {
-        await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', user.id);
+        const { error } = await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', user.id);
+        if (error) throw error;
         setMyLikes((s) => { const n = new Set(s); n.delete(postId); return n; });
         setLikeCounts((c) => ({ ...c, [postId]: Math.max(0, (c[postId] ?? 1) - 1) }));
       } else {
-        await supabase.from('post_likes').insert({ post_id: postId, user_id: user.id });
+        const { error } = await supabase.from('post_likes').insert({ post_id: postId, user_id: user.id });
+        if (error) throw error;
         setMyLikes((s) => new Set([...s, postId]));
         setLikeCounts((c) => ({ ...c, [postId]: (c[postId] ?? 0) + 1 }));
       }
@@ -597,30 +599,29 @@ export default function Profile() {
     }
   };
 
-  // ── Pin / Unpin post ────────────────────────────────────────────────────────
+  // ── Pin / Unpin post ─────────────────────────────────────────────────────────
   const handlePin = async (postId: string) => {
-    if (!profile) return;
-    await supabase.from('profiles').update({ pinned_post_id: postId }).eq('id', profileId);
+    const { error } = await supabase.from('profiles').update({ pinned_post_id: postId }).eq('id', profileId);
+    if (error) { toast.error(error.message); return; }
     setProfile((p) => p ? { ...p, pinned_post_id: postId } : p);
     toast.success('Gönderi sabitlendi.');
   };
 
   const handleUnpin = async () => {
-    await supabase.from('profiles').update({ pinned_post_id: null }).eq('id', profileId);
+    const { error } = await supabase.from('profiles').update({ pinned_post_id: null }).eq('id', profileId);
+    if (error) { toast.error(error.message); return; }
     setProfile((p) => p ? { ...p, pinned_post_id: null } : p);
     toast.success('Sabitleme kaldırıldı.');
   };
 
-  // ── Navigate to message ─────────────────────────────────────────────────────
   const handleMessage = () => navigate('/messages');
 
-  // ── Reload on edit saved ────────────────────────────────────────────────────
   const handleEditSaved = () => {
     fetchProfile();
     fetchStats();
   };
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+  // ─── Render ──────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -644,7 +645,6 @@ export default function Profile() {
 
   const roleName = profile.role === 'admin' ? 'Yönetici' : profile.role === 'staff' ? 'Personel' : profile.role;
 
-  // Sort posts: pinned first, then by date
   const sortedPosts = [...posts].sort((a, b) => {
     if (a.id === profile.pinned_post_id) return -1;
     if (b.id === profile.pinned_post_id) return 1;
@@ -652,44 +652,32 @@ export default function Profile() {
   });
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="max-w-2xl mx-auto pb-12"
-    >
-      {/* Back button for other profiles */}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl mx-auto pb-12">
       {!isOwnProfile && (
-        <button
-          onClick={goBack}
-          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground mb-4 transition-colors text-sm"
-        >
+        <button onClick={goBack} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground mb-4 transition-colors text-sm">
           <ChevronLeft className="w-4 h-4" /> Geri
         </button>
       )}
 
-      {/* ── Cover Photo ─────────────────────────────────────────────────────── */}
+      {/* Cover */}
       <div className="relative rounded-2xl overflow-hidden mb-0">
         <div className="w-full h-44 md:h-56 relative">
-          {profile.cover_url ? (
-            <img src={profile.cover_url} alt="Kapak" className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-black via-primary/20 to-black" />
-          )}
+          {profile.cover_url
+            ? <img src={profile.cover_url} alt="Kapak" className="w-full h-full object-cover" />
+            : <div className="w-full h-full bg-gradient-to-br from-black via-primary/20 to-black" />}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
         </div>
 
-        {/* Avatar — overlapping the cover */}
+        {/* Avatar */}
         <div className="absolute -bottom-14 left-5 md:left-8">
-          <div className="relative">
-            <div className="w-24 h-24 md:w-28 md:h-28 rounded-full bg-black border-4 border-background overflow-hidden flex items-center justify-center shadow-xl">
-              {profile.photo_url
-                ? <img src={profile.photo_url} alt={profile.display_name} className="w-full h-full object-cover" />
-                : <User className="w-10 h-10 text-muted-foreground" />}
-            </div>
+          <div className="w-24 h-24 md:w-28 md:h-28 rounded-full bg-black border-4 border-background overflow-hidden flex items-center justify-center shadow-xl">
+            {profile.photo_url
+              ? <img src={profile.photo_url} alt={profile.display_name} className="w-full h-full object-cover" />
+              : <User className="w-10 h-10 text-muted-foreground" />}
           </div>
         </div>
 
-        {/* Action buttons — top-right of cover */}
+        {/* Action buttons */}
         <div className="absolute top-3 right-3 flex items-center gap-2">
           {isOwnProfile ? (
             <button
@@ -727,20 +715,16 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* ── Profile Info ──────────────────────────────────────────────────────── */}
+      {/* Profile info */}
       <div className="pt-16 px-5 md:px-8 pb-5 glass rounded-b-2xl border border-t-0 border-white/5">
-        {/* Name & username */}
         <div className="mb-3">
           <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground">{profile.display_name}</h1>
-          {profile.username && (
-            <p className="text-sm text-primary/70 mt-0.5">@{profile.username}</p>
-          )}
+          {profile.username && <p className="text-sm text-primary/70 mt-0.5">@{profile.username}</p>}
           <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1">
             <Calendar className="w-3.5 h-3.5" /> {fmtDate(profile.joined_at)} tarihinden beri üye
           </p>
         </div>
 
-        {/* Badges row */}
         <div className="flex flex-wrap gap-2 mb-4">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium uppercase tracking-wider">
             <Shield className="w-3 h-3" /> {roleName}
@@ -758,7 +742,6 @@ export default function Profile() {
           ))}
         </div>
 
-        {/* Bio */}
         {profile.bio ? (
           <p className="text-sm text-foreground/80 leading-relaxed mb-4 whitespace-pre-wrap">{profile.bio}</p>
         ) : isOwnProfile ? (
@@ -769,7 +752,7 @@ export default function Profile() {
           <p className="text-sm text-muted-foreground italic mb-4">Biyografi yok.</p>
         )}
 
-        {/* Stats row */}
+        {/* Stats */}
         <div className="flex items-center gap-1 flex-wrap border-t border-white/5 pt-4 -mx-2">
           <StatPill value={stats.postCount} label="Gönderi" />
           <div className="w-px h-8 bg-white/10" />
@@ -777,21 +760,13 @@ export default function Profile() {
           <div className="w-px h-8 bg-white/10" />
           <StatPill value={stats.likeCount} label="Beğeni" />
           <div className="w-px h-8 bg-white/10" />
-          <StatPill
-            value={stats.followerCount}
-            label="Takipçi"
-            onClick={() => { fetchFollowLists(); setShowFollowers(true); }}
-          />
+          <StatPill value={stats.followerCount} label="Takipçi" onClick={() => { fetchFollowLists(); setShowFollowers(true); }} />
           <div className="w-px h-8 bg-white/10" />
-          <StatPill
-            value={stats.followingCount}
-            label="Takip"
-            onClick={() => { fetchFollowLists(); setShowFollowing(true); }}
-          />
+          <StatPill value={stats.followingCount} label="Takip" onClick={() => { fetchFollowLists(); setShowFollowing(true); }} />
         </div>
       </div>
 
-      {/* ── Tabs ─────────────────────────────────────────────────────────────── */}
+      {/* Tabs */}
       <div className="mt-6">
         <div className="flex gap-1 p-1 bg-white/5 border border-white/10 rounded-2xl mb-5">
           {([
@@ -814,7 +789,6 @@ export default function Profile() {
           ))}
         </div>
 
-        {/* Tab content */}
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -824,9 +798,7 @@ export default function Profile() {
             transition={{ duration: 0.2 }}
           >
             {tabLoading ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="w-7 h-7 animate-spin text-primary" />
-              </div>
+              <div className="flex justify-center py-16"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>
             ) : activeTab === 'posts' ? (
               sortedPosts.length === 0 ? (
                 <EmptyState icon={Grid3X3} message="Henüz gönderi yok." />
@@ -839,7 +811,7 @@ export default function Profile() {
                       isPinned={post.id === profile.pinned_post_id}
                       isOwnProfile={isOwnProfile}
                       onPin={handlePin}
-                      onUnpin={() => handleUnpin()}
+                      onUnpin={handleUnpin}
                       likeCount={likeCounts[post.id] ?? 0}
                       likedByMe={myLikes.has(post.id)}
                       onLike={handleLike}
@@ -924,7 +896,7 @@ export default function Profile() {
         </AnimatePresence>
       </div>
 
-      {/* ── Modals ───────────────────────────────────────────────────────────── */}
+      {/* Modals */}
       <AnimatePresence>
         {showFollowers && (
           <FollowListModal
@@ -940,7 +912,7 @@ export default function Profile() {
             onClose={() => setShowFollowing(false)}
           />
         )}
-        {showEdit && isOwnProfile && (
+        {showEdit && isOwnProfile && profile && (
           <EditProfileModal
             profile={profile}
             onClose={() => setShowEdit(false)}
@@ -949,14 +921,5 @@ export default function Profile() {
         )}
       </AnimatePresence>
     </motion.div>
-  );
-}
-
-function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
-  return (
-    <div className="text-center py-16 glass rounded-2xl border border-dashed border-white/10">
-      <Icon className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-30" />
-      <p className="text-muted-foreground text-sm">{message}</p>
-    </div>
   );
 }

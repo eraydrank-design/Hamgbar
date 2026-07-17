@@ -1,6 +1,7 @@
 import { useAuth } from '@/lib/auth-context';
 import { useCollection } from '@/hooks/use-firestore';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Plus, Pin, Bell as BellIcon, Trash2, X, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -21,20 +22,28 @@ export default function Announcements() {
 
   const handleAdd = async () => {
     if (!formTitle || !formBody) return;
-    await add({
-      title: formTitle,
-      body: formBody,
-      pinned: formPinned,
-      author: userData?.display_name || 'Yönetici',
-    });
-    setFormTitle('');
-    setFormBody('');
-    setFormPinned(false);
-    setIsAdding(false);
+    try {
+      await add({
+        title: formTitle,
+        body: formBody,
+        pinned: formPinned,
+        author: userData?.display_name || 'Yönetici',
+      });
+      setFormTitle('');
+      setFormBody('');
+      setFormPinned(false);
+      setIsAdding(false);
+    } catch (err: any) {
+      toast.error(`Duyuru yayınlanamadı: ${err?.message ?? String(err)}`);
+    }
   };
 
   const togglePin = async (id: string, currentPinned: boolean) => {
-    await update(id, { pinned: !currentPinned });
+    try {
+      await update(id, { pinned: !currentPinned });
+    } catch (err: any) {
+      toast.error(`Sabitleme güncellenemedi: ${err?.message ?? String(err)}`);
+    }
   };
 
   const sortedAnnouncements = [...announcements].sort((a, b) => {

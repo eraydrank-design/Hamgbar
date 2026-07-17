@@ -1,6 +1,7 @@
 import { useAuth } from '@/lib/auth-context';
 import { useCollection } from '@/hooks/use-firestore';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { CheckSquare, Plus, Clock, User, Check, Play, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -41,20 +42,24 @@ export default function Tasks() {
 
   const handleAdd = async () => {
     if (!formTitle) return;
-    await add({
-      title: formTitle,
-      description: formDesc,
-      assigned_to: formAssignee || null,
-      priority: formPriority,
-      status: 'pending',
-      due_date: formDate ? new Date(formDate).toISOString() : null,
-      created_by: userData?.display_name,
-    });
-    setIsAdding(false);
-    setFormTitle('');
-    setFormDesc('');
-    setFormAssignee('');
-    setFormDate('');
+    try {
+      await add({
+        title: formTitle,
+        description: formDesc,
+        assigned_to: formAssignee || null,
+        priority: formPriority,
+        status: 'pending',
+        due_date: formDate ? new Date(formDate).toISOString() : null,
+        created_by: userData?.display_name,
+      });
+      setIsAdding(false);
+      setFormTitle('');
+      setFormDesc('');
+      setFormAssignee('');
+      setFormDate('');
+    } catch (err: any) {
+      toast.error(`Görev oluşturulamadı: ${err?.message ?? String(err)}`);
+    }
   };
 
   const updateStatus = async (id: string, currentStatus: string) => {
@@ -63,7 +68,11 @@ export default function Tasks() {
       in_progress: 'done',
       done: 'pending',
     };
-    await update(id, { status: nextMap[currentStatus] });
+    try {
+      await update(id, { status: nextMap[currentStatus] });
+    } catch (err: any) {
+      toast.error(`Durum güncellenemedi: ${err?.message ?? String(err)}`);
+    }
   };
 
   const getPriorityColor = (p: string) => {
