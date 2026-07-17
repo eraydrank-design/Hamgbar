@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   User, Camera, Save, Shield, Calendar, Edit2, Loader2, X,
   MessageSquare, UserPlus, UserMinus, Heart, Martini, Pin,
-  PinOff, Trophy, Star, Grid3X3, Wine, ChevronLeft,
+  PinOff, Trophy, Star, Grid3X3, Wine, ChevronLeft, Bookmark,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -40,7 +40,7 @@ interface ProfileStats {
   rank: number;
 }
 
-type TabKey = 'posts' | 'cocktails' | 'likes';
+type TabKey = 'posts' | 'cocktails' | 'likes' | 'saved';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -414,6 +414,7 @@ export default function Profile() {
   const [posts, setPosts] = useState<any[]>([]);
   const [cocktails, setCocktails] = useState<any[]>([]);
   const [likedPosts, setLikedPosts] = useState<any[]>([]);
+  const [savedPostsList, setSavedPostsList] = useState<any[]>([]);
   const [tabLoading, setTabLoading] = useState(false);
 
   // Likes state (for posts tab)

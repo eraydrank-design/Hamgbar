@@ -1,0 +1,170 @@
+Upgrade HangBar social content system with missing Instagram-style features.
+
+IMPORTANT:
+First analyze the existing posts, stories, profiles, Supabase tables and storage.
+Do not rewrite existing features.
+Do not break working systems.
+Integrate into the current architecture.
+
+FEATURES:
+
+1. STORY DELETE
+
+Add story management:
+
+Users can delete their own stories.
+
+Requirements:
+- Add delete option in story viewer.
+- Only story owner can see delete button.
+- Ask confirmation before deleting.
+- Delete story record from Supabase.
+- Delete related media from Storage if possible.
+- Remove instantly from UI.
+
+
+2. STORY TEXT OVER IMAGE
+
+Improve story creation.
+
+Add Instagram-style text editor:
+
+Users can:
+- Upload image.
+- Add text overlay on image.
+- Move text position.
+- Change text size.
+- Change text color.
+- Add multiple text layers if possible.
+- Preview before posting.
+
+Save:
+- Text content
+- Text position
+- Text style settings
+
+Update stories database if needed:
+
+Add:
+- text_overlay jsonb
+
+
+3. POST DELETE
+
+Add post deletion.
+
+Requirements:
+- Users can delete their own posts.
+- Delete button in post menu (...)
+- Confirmation dialog.
+- Remove post images from storage.
+- Update feed instantly.
+
+
+4. CAROUSEL POSTS
+
+Upgrade posts to support multiple images.
+
+Requirements:
+
+Users can upload multiple images in one post.
+
+Features:
+- Swipe left/right between images.
+- Show image counter:
+Example:
+1/5
+
+- Show carousel dots.
+- Smooth mobile experience.
+
+Database:
+
+Create if needed:
+
+post_images:
+
+- id
+- post_id
+- image_url
+- order_index
+- created_at
+
+
+5. POST SAVE / BOOKMARK SYSTEM
+
+Add Instagram-style save feature.
+
+Users can save posts.
+
+Features:
+- Bookmark icon on posts.
+- Save / unsave instantly.
+- Create saved posts page in profile.
+
+Database:
+
+Create:
+
+saved_posts:
+
+- id
+- user_id
+- post_id
+- created_at
+
+
+6. PROFILE SAVED SECTION
+
+Add:
+
+Profile
+→ Saved
+
+Show all saved posts.
+
+Only the owner can see saved posts.
+
+
+7. UI
+
+Make everything Instagram style:
+
+Post menu:
+(...)
+- Edit
+- Delete
+- Save
+
+Story menu:
+(...)
+- Delete
+
+Add smooth animations and mobile friendly design.
+
+
+8. SECURITY
+
+Supabase RLS:
+
+Users can:
+- Delete only their own stories/posts.
+- Save posts.
+- View only their own saved posts.
+
+
+9. TESTING
+
+Test:
+
+- Delete story
+- Delete post
+- Upload multiple images
+- Swipe carousel
+- Add story text
+- Save post
+- Refresh persistence
+
+Fix TypeScript errors and build errors.
+
+Keep HangBar Turkish UI.

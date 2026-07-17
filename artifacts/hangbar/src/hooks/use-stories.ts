@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
+export interface StoryTextOverlay {
+  text:     string;
+  color:    string;              // hex e.g. '#FFFFFF'
+  size:     'sm' | 'md' | 'lg';
+  position: 'top' | 'center' | 'bottom';
+}
+
 export interface Story {
   id: string;
   user_id: string;
@@ -8,6 +15,7 @@ export interface Story {
   media_type: 'image' | 'video' | 'text';
   text_content: string | null;
   text_bg: string | null;
+  text_overlay: StoryTextOverlay | null;
   created_at: string;
   expires_at: string;
   viewed: boolean;
