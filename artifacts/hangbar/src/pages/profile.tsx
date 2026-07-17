@@ -660,17 +660,20 @@ export default function Profile() {
       )}
 
       {/* Cover */}
-      <div className="relative rounded-2xl overflow-hidden mb-0">
-        <div className="w-full h-44 md:h-56 relative">
+      {/* NOTE: overflow-hidden is on the inner image div only — NOT the outer wrapper.
+          The avatar uses absolute -bottom-14 and must not be clipped by a parent overflow-hidden. */}
+      <div className="relative mb-0">
+        {/* Image area: clips the cover photo to rounded corners */}
+        <div className="w-full h-44 md:h-56 relative rounded-2xl overflow-hidden">
           {profile.cover_url
             ? <img src={profile.cover_url} alt="Kapak" className="w-full h-full object-cover" />
-            : <div className="w-full h-full bg-gradient-to-br from-black via-primary/20 to-black" />}
+            : <div className="w-full h-full bg-gradient-to-br from-black via-primary/20 to-black rounded-2xl" />}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
         </div>
 
-        {/* Avatar */}
-        <div className="absolute -bottom-14 left-5 md:left-8">
-          <div className="w-24 h-24 md:w-28 md:h-28 rounded-full bg-black border-4 border-background overflow-hidden flex items-center justify-center shadow-xl">
+        {/* Avatar — sibling of the image div so it is never clipped */}
+        <div className="absolute -bottom-14 left-5 md:left-8 z-10">
+          <div className="w-24 h-24 md:w-28 md:h-28 rounded-full bg-black border-4 border-background overflow-hidden flex items-center justify-center shadow-xl flex-shrink-0">
             {profile.photo_url
               ? <img src={profile.photo_url} alt={profile.display_name} className="w-full h-full object-cover" />
               : <User className="w-10 h-10 text-muted-foreground" />}
