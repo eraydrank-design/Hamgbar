@@ -33,13 +33,20 @@ export function useStories(myUserId: string | undefined) {
     const now = new Date().toISOString();
 
     // 1. Fetch active (non-expired) stories
-    const { data: rawStories, error } = await supabase
+    const { data: rawStories, error: storiesError } = await supabase
       .from('stories')
       .select('*')
       .gt('expires_at', now)
       .order('created_at', { ascending: true });
 
-    if (error || !rawStories || rawStories.length === 0) {
+    if (storiesError) {
+      console.error('[stories] fetch error:', storiesError.message);
+      setStoryGroups([]);
+      setLoading(false);
+      return;
+    }
+
+    if (!rawStories || rawStories.length === 0) {
       setStoryGroups([]);
       setLoading(false);
       return;
@@ -49,7 +56,11 @@ export function useStories(myUserId: string | undefined) {
     const userIds  = [...new Set(rawStories.map((s: any) => s.user_id as string))];
 
     // 2. Parallel: my views + all view counts + user profiles
-    const [{ data: myViews }, { data: allViews }, { data: profiles }] = await Promise.all([
+    const [
+      { data: myViews,  error: myViewsError  },
+      { data: allViews, error: allViewsError  },
+      { data: profiles, error: profilesError  },
+    ] = await Promise.all([
       supabase
         .from('story_views')
         .select('story_id')
@@ -64,6 +75,10 @@ export function useStories(myUserId: string | undefined) {
         .select('id, display_name, photo_url')
         .in('id', userIds),
     ]);
+
+    if (myViewsError)  console.error('[stories] my-views error:', myViewsError.message);
+    if (allViewsError) console.error('[stories] all-views error:', allViewsError.message);
+    if (profilesError) console.error('[stories] profiles error:', profilesError.message);
 
     const viewedSet = new Set((myViews ?? []).map((v: any) => v.story_id as string));
     const countMap: Record<string, number> = {};
@@ -80,18 +95,18 @@ export function useStories(myUserId: string | undefined) {
       if (!groupMap[s.user_id]) groupMap[s.user_id] = [];
       groupMap[s.user_id].push({
         ...(s as any),
-        viewed: viewedSet.has(s.id),
+        viewed:     viewedSet.has(s.id),
         view_count: countMap[s.id] ?? 0,
       });
     }
 
     // 4. Build sorted groups: own first, then unseen, then seen
     const groups: StoryGroup[] = Object.entries(groupMap).map(([uid, stories]) => ({
-      userId: uid,
+      userId:       uid,
       display_name: profileMap[uid]?.display_name ?? 'Üye',
-      photo_url: profileMap[uid]?.photo_url ?? '',
+      photo_url:    profileMap[uid]?.photo_url    ?? '',
       stories,
-      hasUnseen: stories.some((s) => !s.viewed),
+      hasUnseen:    stories.some((s) => !s.viewed),
     }));
 
     groups.sort((a, b) => {
