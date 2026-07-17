@@ -1,8 +1,8 @@
 import { useAuth } from '@/lib/auth-context';
 import { useCollection } from '@/hooks/use-firestore';
-import { motion } from 'framer-motion';
 import { Bell, MessageSquare, ClipboardList, CheckSquare, Martini, ArrowRight, Trophy, User } from 'lucide-react';
 import { Link } from 'wouter';
+import { StoryBar } from '@/components/stories/StoryBar';
 
 export default function Dashboard() {
   const { userData } = useAuth();
@@ -37,6 +37,9 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
+      {/* ── Stories ──────────────────────────────────────────────────────────── */}
+      <StoryBar />
+
       <header className="flex items-end justify-between border-b border-white/10 pb-6">
         <div>
           <h1 className="font-serif text-3xl font-bold text-gradient-gold mb-2">
