@@ -21,6 +21,7 @@ Run them in order via **Supabase Dashboard → SQL Editor → New query → Run*
 
 1. `001_initial.sql` — Core tables (profiles, posts, messages, cocktails, etc.)
 2. `002_social.sql` — Social profile tables (follows, post_likes) + profile columns (cover_url, points, pinned_post_id)
+3. `003_notifications.sql` — Notifications table with RLS + realtime
 
 ## Stack
 

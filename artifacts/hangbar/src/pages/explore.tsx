@@ -1,4 +1,5 @@
 import { useAuth } from '@/lib/auth-context';
+import { createNotification } from '@/lib/notify';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -52,7 +53,7 @@ const fmtDateTime = (d: string | null | undefined) => {
 
 // ─── CommentsSection ──────────────────────────────────────────────────────────
 
-function CommentsSection({ postId, user, userData }: { postId: string; user: any; userData: any }) {
+function CommentsSection({ postId, postAuthorId, user, userData }: { postId: string; postAuthorId: string; user: any; userData: any }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -106,6 +107,16 @@ function CommentsSection({ postId, user, userData }: { postId: string; user: any
       });
       if (error) throw error;
       setNewComment('');
+      // Notify post author
+      if (postAuthorId && postAuthorId !== user.id) {
+        createNotification({
+          userId:   postAuthorId,
+          senderId: user.id,
+          type:     'comment',
+          postId,
+          message:  `${userData?.display_name ?? 'Bir üye'} gönderinize yorum yaptı`,
+        }).catch(() => {});
+      }
     } catch (err: any) {
       toast.error(err?.message ?? 'Yorum gönderilemedi.');
     } finally {
@@ -325,7 +336,7 @@ function PostCard({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <CommentsSection postId={post.id} user={user} userData={userData} />
+            <CommentsSection postId={post.id} postAuthorId={post.author_id} user={user} userData={userData} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -461,6 +472,17 @@ export default function Explore() {
       } else {
         const { error } = await supabase.from('post_likes').insert({ post_id: postId, user_id: user.id });
         if (error) throw error;
+        // Notify post author
+        const likedPost = posts.find((p) => p.id === postId);
+        if (likedPost?.author_id && likedPost.author_id !== user.id) {
+          createNotification({
+            userId:   likedPost.author_id,
+            senderId: user.id,
+            type:     'like',
+            postId,
+            message:  `${userData?.display_name ?? 'Bir üye'} gönderinizi beğendi`,
+          }).catch(() => {});
+        }
       }
     } catch (err: any) {
       // Roll back optimistic update on failure

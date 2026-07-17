@@ -1,4 +1,5 @@
 import { useAuth } from '@/lib/auth-context';
+import { createNotification } from '@/lib/notify';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { supabase } from '@/lib/supabase';
@@ -393,7 +394,7 @@ function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
 // ─── Main Profile Page ────────────────────────────────────────────────────────
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
   const params = useParams<{ userId?: string }>();
   const [, navigate] = useLocation();
   const goBack = () => window.history.back();
@@ -571,6 +572,13 @@ export default function Profile() {
         setIsFollowing(true);
         setStats((s) => ({ ...s, followerCount: s.followerCount + 1 }));
         setFollowerIds((ids) => [...ids, user.id]);
+        // Notify the followed user
+        createNotification({
+          userId:    profileId,
+          senderId:  user.id,
+          type:      'follow',
+          message:   `${userData?.display_name ?? 'Bir üye'} sizi takip etmeye başladı`,
+        }).catch(() => {});
       }
     } catch (err: any) {
       toast.error(err?.message ?? 'İşlem başarısız.');

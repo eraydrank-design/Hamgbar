@@ -1,4 +1,5 @@
 import { useAuth } from '@/lib/auth-context';
+import { createNotification } from '@/lib/notify';
 import { useCollection } from '@/hooks/use-firestore';
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -18,6 +19,18 @@ export default function Messages() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const { data: users, loading: usersLoading } = useCollection('profiles');
+
+  // ── Mark incoming messages as read when conversation opens ─────────────
+  useEffect(() => {
+    if (!user || !selectedUser) return;
+    supabase
+      .from('messages')
+      .update({ read: true })
+      .eq('receiver_id', user.id)
+      .eq('sender_id', selectedUser.id)
+      .eq('read', false)
+      .then(() => {});
+  }, [user?.id, selectedUser?.id]);
 
   // ── Fetch + subscribe to messages for current conversation ───────────────
   useEffect(() => {
@@ -88,7 +101,16 @@ export default function Messages() {
     if (error) {
       toast.error(`Mesaj gönderilemedi: ${error.message}`);
       setMessageText(text);
+      return;
     }
+
+    // Notify receiver
+    createNotification({
+      userId:   selectedUser.id,
+      senderId: user.id,
+      type:     'message',
+      message:  `${userData?.display_name ?? 'Bir üye'} size mesaj gönderdi`,
+    }).catch(() => {});
   };
 
   const filteredUsers = users.filter(

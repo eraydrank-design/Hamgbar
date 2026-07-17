@@ -1,0 +1,118 @@
+Implement a complete social notification system for HangBar.
+
+IMPORTANT:
+First analyze the existing codebase and Supabase database structure.
+Do not create duplicate tables or break existing features.
+Use the current architecture and components.
+
+FEATURES:
+
+1. Notification Center
+- Add a notification icon in the UI.
+- Create a notification page/dropdown.
+- Users should see:
+  - New followers
+  - Post likes
+  - Post comments
+  - New messages
+
+2. Notification database
+
+Create or update Supabase notifications table:
+
+columns:
+- id uuid primary key
+- user_id uuid (notification receiver)
+- sender_id uuid (person who triggered notification)
+- type text
+- post_id uuid nullable
+- message text
+- is_read boolean default false
+- created_at timestamp
+
+Notification types:
+- follow
+- like
+- comment
+- message
+
+
+3. Automatic notifications:
+
+When a user follows another user:
+Create notification:
+"[username] started following you"
+
+When a user likes a post:
+Create notification:
+"[username] liked your post"
+
+When a user comments:
+Create notification:
+"[username] commented on your post"
+
+When a user sends a message:
+Create notification:
+"[username] sent you a message"
+
+
+4. Realtime updates:
+Use Supabase Realtime.
+
+Requirements:
+- New notifications should appear instantly without refreshing.
+- New messages should update instantly.
+
+
+5. Notification badge:
+Add unread counter badge.
+
+Example:
+Notification icon:
+🔔 3
+
+Messages icon:
+💬 1
+
+The badge should:
+- Show unread count
+- Update realtime
+- Disappear after notifications/messages are read
+
+
+6. Notification UI:
+Each notification should display:
+- User profile photo
+- Username
+- Action text
+- Time
+- Read/unread status
+
+
+7. Message unread system:
+Check existing messages table.
+
+If missing:
+Add:
+- is_read boolean default false
+
+When opening a conversation:
+Mark messages as read.
+
+Update unread message count automatically.
+
+
+8. Security:
+Add proper Supabase Row Level Security policies:
+- Users can only read their own notifications.
+- Users can create notifications when performing allowed actions.
+
+
+9. Testing:
+After implementation:
+- Fix TypeScript errors.
+- Fix build errors.
+- Verify follow, like, comment and message notifications work.
+
+Do not rewrite the application.
+Only add this feature cleanly.

@@ -1,5 +1,7 @@
 import { Link, useLocation } from 'wouter';
 import { useAuth } from '@/lib/auth-context';
+import { useNotifications } from '@/lib/notification-context';
+import { NotificationBell, NotificationBellMobile } from '@/components/notifications/NotificationBell';
 import { 
   Home, 
   Compass, 
@@ -20,6 +22,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { userData, signOut } = useAuth();
+  const { unreadMessagesCount } = useNotifications();
   const [location, setLocation] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -29,7 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const mainLinks = [
     { href: '/dashboard', label: 'Ana Sayfa', icon: Home },
     { href: '/explore', label: 'Keşfet', icon: Compass },
-    { href: '/messages', label: 'Mesajlar', icon: MessageSquare },
+    { href: '/messages', label: 'Mesajlar', icon: MessageSquare, badge: unreadMessagesCount },
     { href: '/cocktails', label: 'Kokteyller', icon: Martini },
     { href: '/profile', label: 'Profil', icon: User },
   ];
@@ -42,7 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ...(isAdmin ? [{ href: '/admin', label: 'Yönetim', icon: ShieldAlert }] : []),
   ];
 
-  const NavItem = ({ href, label, icon: Icon, onClick }: any) => {
+  const NavItem = ({ href, label, icon: Icon, onClick, badge }: any) => {
     const isActive = location === href;
     return (
       <Link href={href} className="w-full block">
@@ -56,7 +59,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           data-testid={`nav-${label.toLowerCase().replace(/\s/g, '-')}`}
         >
           <Icon className={`w-5 h-5 ${isActive ? 'text-primary' : ''}`} />
-          <span>{label}</span>
+          <span className="flex-1">{label}</span>
+          {badge > 0 && (
+            <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
+              {badge > 99 ? '99+' : badge}
+            </span>
+          )}
         </div>
       </Link>
     );
@@ -80,6 +88,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div>
             <h3 className="px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Daha Fazla</h3>
             <div className="space-y-1">
+              <NotificationBell />
               {secondaryLinks.map((link) => (
                 <NavItem key={link.href} {...link} />
               ))}
@@ -115,13 +124,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Mobile Header */}
       <header className="md:hidden flex items-center justify-between p-4 glass sticky top-0 z-30">
         <h1 className="font-serif text-xl font-bold text-gradient-gold tracking-wider uppercase">HangBar</h1>
-        <button 
-          onClick={() => setMobileMenuOpen(true)}
-          className="p-2 text-foreground"
-          data-testid="button-mobile-menu"
-        >
-          <Menu className="w-6 h-6" />
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationBellMobile />
+          <button 
+            onClick={() => setMobileMenuOpen(true)}
+            className="p-2 text-foreground"
+            data-testid="button-mobile-menu"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+        </div>
       </header>
 
       {/* Mobile Bottom Nav */}
@@ -132,8 +144,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             const isActive = location === link.href;
             return (
               <Link key={link.href} href={link.href} className="w-full">
-                <div className={`flex flex-col items-center justify-center p-2 transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
-                  <Icon className="w-6 h-6 mb-1" />
+                <div className={`relative flex flex-col items-center justify-center p-2 transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
+                  <div className="relative">
+                    <Icon className="w-6 h-6 mb-1" />
+                    {(link as any).badge > 0 && (
+                      <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-3.5 px-1 rounded-full bg-primary text-primary-foreground text-[8px] font-bold leading-none">
+                        {(link as any).badge > 9 ? '9+' : (link as any).badge}
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[10px] font-medium">{link.label}</span>
                 </div>
               </Link>

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
 import { AuthProvider } from '@/lib/auth-context';
+import { NotificationProvider } from '@/lib/notification-context';
 import { ProtectedRoute } from '@/components/layout/protected-route';
 import { AppShell } from '@/components/layout/app-shell';
 import { Toaster } from 'sonner';
@@ -121,19 +122,21 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Router />
-        </WouterRouter>
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            style: {
-              background: '#1a1a1a',
-              border: '1px solid rgba(212,175,55,0.2)',
-              color: '#f5f5f5',
-            },
-          }}
-        />
+        <NotificationProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+            <Router />
+          </WouterRouter>
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              style: {
+                background: '#1a1a1a',
+                border: '1px solid rgba(212,175,55,0.2)',
+                color: '#f5f5f5',
+              },
+            }}
+          />
+        </NotificationProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
